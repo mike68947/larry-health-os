@@ -83,6 +83,20 @@ def test_canonical_ref_crosscheck():
     assert r["issues"].get("canonical_ref")
 
 
+def test_canonical_ref_compares_in_one_scale():
+    """Регресс 2026-10-31: бланк в СИ, кэш референсов — conventional. Раньше 0.7 mmol/L
+    сверялось с 1.70 mg/dL напрямую и каждый СИ-документ краснел."""
+    refs = {"Magnesium": (1.7013, 2.309, "mg/dL")}
+    same = [_t("Magnesium", 0.85, unit="mmol/L", ref_low=0.7, ref_high=0.95, doc_flag="N")]
+    assert not lo.verify(same, canonical_refs=refs)["issues"].get("canonical_ref")
+    # настоящее расхождение в той же СИ-шкале ловится по-прежнему
+    off = [_t("Magnesium", 0.85, unit="mmol/L", ref_low=7.0, ref_high=9.5, doc_flag="N")]
+    assert lo.verify(off, canonical_refs=refs)["issues"].get("canonical_ref")
+    # единица без известной конверсии — молчит, а не гадает
+    alien = [_t("Magnesium", 0.85, unit="mEq/L", ref_low=1.4, ref_high=1.9, doc_flag="N")]
+    assert not lo.verify(alien, canonical_refs=refs)["issues"].get("canonical_ref")
+
+
 def test_dedup_ignores_null_canonical_names():
     # два показателя без canonical_name (вне словаря) не должны схлопываться
     tests = [_t(None, 1.36), _t(None, 3.8)]

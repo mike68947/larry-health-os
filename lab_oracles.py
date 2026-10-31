@@ -136,11 +136,24 @@ def _o_completeness(tests: list[dict]) -> list[str]:
 def _o_canonical_ref(t: dict, refs: dict) -> list[str]:
     """Кросс-проверка: напечатанный в документе реф-диапазон vs канонический
     из system_config.lab_refs. Сильное расхождение → подозрение на парсинг
-    либо устаревший канон. Soft-оракул (включается только если refs передан)."""
-    n, lo, hi = t.get("canonical_name"), t.get("ref_low"), t.get("ref_high")
-    if not refs or n not in refs:
+    либо устаревший канон. Soft-оракул (включается только если refs передан).
+
+    Сравнение — в одной шкале: границы документа переводятся в conventional тем же
+    правилом, что значение (lab_canon.to_conventional_range), и сверяются с кэшем только
+    если единицы после перевода совпали. Без единицы документа или без известной конверсии
+    оракул молчит — он не может судить то, что не может сравнить (это делает оракул units).
+    До 2026-10-31 СИ-референс бланка сверялся с conventional-кэшем напрямую, и каждый
+    СИ-документ краснел (Mg 0.7–0.95 mmol/L против 1.70–2.31 mg/dL)."""
+    import lab_canon
+    n, lo, hi, unit = t.get("canonical_name"), t.get("ref_low"), t.get("ref_high"), t.get("unit")
+    if not refs or n not in refs or not unit:
         return []
     cmin, cmax = refs[n][0], refs[n][1]
+    cunit = refs[n][2] if len(refs[n]) > 2 else None
+    lo, hi = lab_canon.to_conventional_range(n, lo, hi, unit)
+    _v, dunit = lab_canon.to_conventional(n, lo if lo is not None else hi, unit)
+    if cunit and dunit and lab_canon.norm_unit(cunit).lower() != lab_canon.norm_unit(dunit).lower():
+        return []
     out = []
     for label, doc_v, can_v in (("ref_low", lo, cmin), ("ref_high", hi, cmax)):
         if doc_v is not None and can_v is not None and can_v != 0:
