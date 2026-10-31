@@ -84,3 +84,13 @@ def test_beta_globulin_dimension_and_ratios_dimensionless():
 def test_no_unreachable_synonym_among_added():
     dead = [(c, v) for c in ADDED for v in LC.synonyms_for(c) if LC.normalize(v) != c]
     assert not dead, dead
+
+
+def test_estradiol_lands_in_one_scale():
+    """Серия эстрадиола из двух методов: pmol/L (hs) и ng/L (ИФА) — одна шкала после to_conventional."""
+    v, u = LC.to_conventional("Estradiol", 240.0, "pmol/L")
+    assert u == "pg/mL" and abs(v - 65.38) < 0.01
+    assert LC.to_conventional("Estradiol", 12.42, "ng/L") == (12.42, "pg/mL")
+    assert LC.to_conventional("Estradiol", 20.0, "pg/mL") == (20.0, "pg/mL")
+    lo, hi = LC.to_conventional_range("Estradiol", 29.0, 147.0, "pmol/L")
+    assert abs(lo - 7.9) < 0.01 and abs(hi - 40.04) < 0.01
