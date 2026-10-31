@@ -26,7 +26,7 @@ def test_doc_exts_is_a_usable_set_of_extensions():
 
 @pytest.mark.parametrize("suffix,expected", [
     (".pdf", True), (".PDF".lower(), True), (".heic", True),
-    (".jpeg", True), (".zip", False), (".md", False), ("", False),
+    (".jpeg", True), (".zip", False), (".md", True), ("", False),
 ])
 def test_membership_decides_what_the_step_takes(suffix, expected):
     """Ровно та проверка, которая и падала: принадлежность расширения набору.

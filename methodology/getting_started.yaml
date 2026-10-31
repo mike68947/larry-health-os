@@ -32,7 +32,7 @@ capabilities:
     intent: [document_intake, problem_list_proposals]
     title: {ru: "Медкарта", en: "Medical record"}
     benefit: {ru: "Список проблем и лекарств, из которого исходят все отчёты.", en: "The list of problems and medications that every report starts from."}
-    need: {ru: "Заключения врачей и выписки за 3 года — PDF или фото файлом в бот", en: "Doctors' letters and discharge summaries for the last 3 years — PDF or photo, sent to the bot as a file"}
+    need: {ru: "Заключения врачей и выписки за 3 года — PDF, фото или Markdown (.md) файлом в бот", en: "Doctors' letters and discharge summaries for the last 3 years — PDF, photo or Markdown (.md), sent to the bot as a file"}
     action: {ru: "Пришлите документы боту", en: "Send documents to the bot"}
     action_in_bot: true
     pending_action: {ru: "Разобрать предложения", en: "Review proposals"}

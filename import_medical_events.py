@@ -34,7 +34,7 @@ CR_DIR        = ICLOUD_HEALTH / "CR"
 # падал на КАЖДОМ запуске вотчера с 2026-05-18 по 2026-07-29 (231 отказ в
 # ~/health_watcher.log), не подняв ни одного алерта. Константа вместо выражения:
 # тип-ошибка невозможна там, где нет операции над типами.
-DOC_EXTS = {".pdf", ".jpg", ".jpeg", ".png", ".heic"}
+DOC_EXTS = {".pdf", ".jpg", ".jpeg", ".png", ".heic", ".md"}
 
 # Модель берётся при ВЫЗОВЕ через hai_core.get_model — до 2026-10-01 здесь стояла
 # константа из MODEL_DEFAULTS, и настройка/цепочка модели в БД этот модуль не достигала
@@ -57,6 +57,8 @@ SKIP_PATTERNS = [
 # ── PDF → текст ────────────────────────────────────────────────────────────────
 def extract_text(pdf_path: Path) -> str:
     """Прямое извлечение текста через PyMuPDF. Если текст короткий — OCR."""
+    if pdf_path.suffix.lower() == ".md":   # Markdown — уже текст, без PDF и OCR
+        return pdf_path.read_text(encoding="utf-8", errors="replace")
     import fitz
     doc = fitz.open(str(pdf_path))
     text = "\n".join(page.get_text() for page in doc).strip()

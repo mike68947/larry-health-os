@@ -47,7 +47,7 @@ _ICLOUD_CR = infra_config.cloud_dir("CR")   # дом пути — infra_config (
 
 # Проверяем расширение ДО чтения файла: JSON-сайдкар изображения не является
 # изображением и не должен попадать в распознаватель.
-DOC_EXTS = {".pdf", ".jpg", ".jpeg", ".png", ".heic", ".tif", ".tiff"}
+DOC_EXTS = {".pdf", ".jpg", ".jpeg", ".png", ".heic", ".tif", ".tiff", ".md"}
 
 
 def _tenant() -> str:

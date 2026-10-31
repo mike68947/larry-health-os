@@ -100,6 +100,8 @@ def extract_text(pdf_path: Path) -> str:
     """Извлекает текст из PDF. Для digital PDF использует fitz (быстро, точно).
     Для scanned PDF падает на tesseract OCR. Критично для не-латинских шрифтов —
     tesseract без нужных lang-пакетов даёт мусор."""
+    if pdf_path.suffix.lower() == ".md":   # Markdown — уже текст, без PDF и OCR
+        return pdf_path.read_text(encoding="utf-8", errors="replace")
     try:
         import fitz
         doc = fitz.open(str(pdf_path))

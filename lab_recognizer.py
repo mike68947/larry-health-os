@@ -204,10 +204,12 @@ def _render_pages(doc_path: Path, pages: list[int] | None = None) -> list[bytes]
         raise ValueError(f"запрошено {len(want)} страниц > cap {_MAX_PAGES}: "
                          f"подними HEALTH_LAB_MAX_PAGES осознанно")
     out: list[bytes] = []
-    if ext == ".pdf":
+    if ext in (".pdf", ".md"):
         import fitz
         from PIL import Image
-        doc = fitz.open(str(doc_path))
+        # ponytail: Markdown рендерится MuPDF как текстовый документ (моноширинный, кириллица
+        # есть) — дальше тот же путь, что у PDF: две модели, сверка, лист проверки, страницы.
+        doc = fitz.open(str(doc_path), filetype="txt" if ext == ".md" else None)
         if want is None and doc.page_count > _MAX_PAGES:
             count = doc.page_count
             doc.close()

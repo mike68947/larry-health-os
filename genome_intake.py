@@ -58,7 +58,7 @@ SIDECAR = ".genome.json"
 # собираются и русский текст ниже, и строка знакомства на языке человека (i18n, 28.09).
 PROVIDERS = ("23andMe", "AncestryDNA", "MyHeritage", "FTDNA", "tellmeGen (Starter/Advanced)", "LivingDNA")
 SUPPORTED_TEXT = "genome.supported_formats"
-_SKIP_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".heic", ".tif", ".tiff", ".json",
+_SKIP_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".heic", ".tif", ".tiff", ".md", ".json",
              ".failed", ".norows"}
 _CHROM = {**{str(i): str(i) for i in range(1, 23)}, "X": "X", "Y": "Y", "MT": "MT",
           "M": "MT", "23": "X", "24": "Y", "25": "X", "26": "MT", "XY": "X"}
