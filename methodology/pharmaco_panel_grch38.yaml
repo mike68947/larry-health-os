@@ -1,0 +1,25 @@
+# Позиции фармакогенетической панели в GRCh38 (плюс-цепь) — тот же набор rsid, что в
+# pharmaco_panel_grch37.yaml; читается vcf_import_pipeline.phase_r для VCF, собранного на GRCh38
+# (DRAGEN/Nucleus, tellmeGen hg38). В raw_snps координаты пишутся по-прежнему в GRCh37 (конвенция
+# чипа 23andMe), совпадение с файлом ищется по этим позициям.
+# Как получены (2026-10-31): сдвиг GRCh37→GRCh38 постоянен внутри блока выравнивания
+# (chr10 −1 759 757; chr1 −465 556; chr6 −231; chr2 −908 646; chr12 −152 934); каждая позиция
+# проверена по локальному UCSC hg38.fa — референсная буква совпала с ref панели во всех 13;
+# rs12248560 дополнительно подтверждён dbSNP-идентификатором в VCF DRAGEN hg38. Сеть не использовалась.
+# CYP2D6 и HLA-B не входят по тем же причинам, что в GRCh37-панели.
+build: GRCh38
+source: "pharmaco_panel_grch37.yaml + block offsets, REF verified against UCSC hg38.fa 2026-10-31"
+positions:
+  rs1799853:  {gene: CYP2C9,  chrom: "10", pos: 94942290,  ref: C}
+  rs1057910:  {gene: CYP2C9,  chrom: "10", pos: 94981296,  ref: A}
+  rs12248560: {gene: CYP2C19, chrom: "10", pos: 94761900,  ref: C}
+  rs4244285:  {gene: CYP2C19, chrom: "10", pos: 94781859,  ref: G}
+  rs4986893:  {gene: CYP2C19, chrom: "10", pos: 94780653,  ref: G}
+  rs3918290:  {gene: DPYD,    chrom: "1",  pos: 97450058,  ref: C}
+  rs55886062: {gene: DPYD,    chrom: "1",  pos: 97515787,  ref: A}
+  rs67376798: {gene: DPYD,    chrom: "1",  pos: 97082391,  ref: T}
+  rs1142345:  {gene: TPMT,    chrom: "6",  pos: 18130687,  ref: T}
+  rs1800460:  {gene: TPMT,    chrom: "6",  pos: 18138997,  ref: C}
+  rs1800462:  {gene: TPMT,    chrom: "6",  pos: 18143724,  ref: C}
+  rs887829:   {gene: UGT1A1,  chrom: "2",  pos: 233759924, ref: C}
+  rs4149056:  {gene: SLCO1B1, chrom: "12", pos: 21178615,  ref: T}

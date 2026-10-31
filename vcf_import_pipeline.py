@@ -46,6 +46,7 @@ def _default_vcf() -> Path:
 
 
 VCF_DEFAULT = _default_vcf()
+VCF_SOURCE = VCF_DEFAULT   # фактический файл прогона (--vcf); main() переназначает — провенанс genome_imports
 
 # R2-fix (2026-06-29, multitenancy Phase 0): путь к БД — ТОЛЬКО из health_db,
 # единого резолвера. Раньше: Path(HEALTH_DATA_DIR)/"health.db" — это ДРУГОЙ
@@ -246,6 +247,8 @@ def phase_a_update_known(con, vcf_path: Path, dry: bool = False):
     Uses raw_snps.chromosome/position as the position index.
     """
     log.info("═══ Phase A: update_known ═══")
+    if _refuse_foreign_build(con, vcf_path, "A", "позиции raw_snps — GRCh37 (чип)"):
+        return {}
     log_step(con, "A", "start", "started")
 
     # Build position index: (chrom_norm, pos) → rsid
@@ -356,6 +359,8 @@ def phase_b_discover_new(con, vcf_path: Path, dry: bool = False):
     Runtime: 2-4 hours. Checkpointed per chromosome.
     """
     log.info("═══ Phase B: discover_new ═══")
+    if _refuse_foreign_build(con, vcf_path, "B", "запрос myvariant.info идёт с hg19=true"):
+        return
 
     done_chroms = {
         r[0]
@@ -654,7 +659,7 @@ def phase_e_pharmaco(con: sqlite3.Connection, dry: bool = False):
     # Create genome_imports record for this pipeline run
     cur = con.execute(
         "INSERT INTO genome_imports (vcf_source) VALUES (?)",
-        (str(VCF_DEFAULT),),
+        (str(VCF_SOURCE),),
     )
     genome_import_id = cur.lastrowid
     con.commit()
@@ -702,7 +707,7 @@ def phase_f_traits(con: sqlite3.Connection, dry: bool = False):
     if genome_import_id is None:
         cur = con.execute(
             "INSERT INTO genome_imports (vcf_source) VALUES (?)",
-            (str(VCF_DEFAULT),),
+            (str(VCF_SOURCE),),
         )
         genome_import_id = cur.lastrowid
         con.commit()
@@ -749,7 +754,7 @@ def phase_g_wellness(con: sqlite3.Connection, dry: bool = False):
     if genome_import_id is None:
         cur = con.execute(
             "INSERT INTO genome_imports (vcf_source) VALUES (?)",
-            (str(VCF_DEFAULT),),
+            (str(VCF_SOURCE),),
         )
         genome_import_id = cur.lastrowid
         con.commit()
@@ -797,7 +802,7 @@ def phase_h_prs(con: sqlite3.Connection, dry: bool = False):
     if genome_import_id is None:
         cur = con.execute(
             "INSERT INTO genome_imports (vcf_source) VALUES (?)",
-            (str(VCF_DEFAULT),),
+            (str(VCF_SOURCE),),
         )
         genome_import_id = cur.lastrowid
         con.commit()
@@ -840,9 +845,15 @@ def phase_h_prs(con: sqlite3.Connection, dry: bool = False):
 #     расхождение значит, что файл не то, чем кажется.
 
 PANEL_FILE = Path(__file__).resolve().parent / "methodology" / "pharmaco_panel_grch37.yaml"
+# Панель в GRCh38 — тот же набор rsid (2026-10-31): файл DRAGEN/Nucleus hg38 иначе читался бы
+# по чужим координатам. Сборку определяет заголовок (vcf_kind), панель выбирается по ней;
+# raw_snps хранит координаты GRCh37 (конвенция чипа) независимо от сборки файла.
+PANEL_FILES = {"GRCh37": PANEL_FILE,
+               "GRCh38": Path(__file__).resolve().parent / "methodology" / "pharmaco_panel_grch38.yaml"}
 CALLER_MARKS = ("DeepVariant", "GATK", "HaplotypeCaller", "DRAGEN", "Sentieon", "Strelka")
 WGS_MIN_RECORDS = 3_000_000       # экзом — десятки-сотни тысяч записей, полный геном — миллионы
 GRCH37_CHR1 = "249250621"          # длина chr1 в GRCh37/hg19 (в GRCh38 — 248956422)
+GRCH38_CHR1 = "248956422"
 from pharmaco_pipeline import REFCALL_SOURCE as SRC_REFCALL, INFERRED_SOURCE as SRC_INFERRED  # noqa: E402
 SRC_PANEL = "wgs_panel"
 
@@ -852,19 +863,54 @@ def load_panel(path: Path = PANEL_FILE) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))["positions"]
 
 
+def read_header(vcf_path: Path) -> list:
+    """Строки заголовка (##… и #CHROM) без чтения записей — сборку и вызывальщик видно по ним."""
+    header = []
+    with open_vcf(vcf_path) as fh:
+        for line in fh:
+            if not line.startswith("#"):
+                break
+            header.append(line.rstrip("\n"))
+    return header
+
+
 def vcf_kind(header: list, records: int) -> dict:
-    """Что за файл: вызывальщик из заголовка, сборка, полный ли геном (по числу записей)."""
+    """Что за файл: вызывальщик из заголовка, сборка, полный ли геном (по числу записей).
+    build — "GRCh37" | "GRCh38" | None (не распознана): по длине chr1 в ##contig или по имени
+    сборки в заголовке; ключ grch37 оставлен читателям старого вида."""
     text = "\n".join(header)
     caller = next((m for m in CALLER_MARKS if m.lower() in text.lower()), None)
+    grch38 = GRCH38_CHR1 in text or any(b in text for b in ("GRCh38", "hg38"))
     grch37 = (GRCH37_CHR1 in text or any(b in text for b in ("GRCh37", "hg19", "b37", "hs37d5"))) \
-        and "248956422" not in text
-    return {"caller": caller, "grch37": grch37, "records": records,
+        and not grch38
+    build = "GRCh37" if grch37 else "GRCh38" if grch38 else None
+    return {"caller": caller, "grch37": grch37, "build": build, "records": records,
             "wgs": records >= WGS_MIN_RECORDS}
 
 
-def phase_r_reference_fill(con, vcf_path: Path, dry: bool = False, panel: dict = None) -> dict:
+def _refuse_foreign_build(con, vcf_path: Path, phase: str, why: str) -> bool:
+    """Фазы A и B работают в координатах GRCh37 (чип 23andMe; myvariant hg19=true). Файл другой
+    известной сборки — отказ с записью в журнал, а не тихий импорт по чужим позициям.
+    Нераспознанная сборка — предупреждение и прежнее поведение."""
+    build = vcf_kind(read_header(vcf_path), 0)["build"]
+    if build not in (None, "GRCh37"):
+        log.error(f"Phase {phase}: VCF в сборке {build}, а {why} — фаза пропущена")
+        log_step(con, phase, "refused", "error", message=f"build={build}: {why}")
+        return True
+    if build is None:
+        log.warning(f"Phase {phase}: сборка VCF не распознана по заголовку — считаю GRCh37")
+    return False
+
+
+def phase_r_reference_fill(con, vcf_path: Path, dry: bool = False, panel: dict = None,
+                           panel_build: str = "GRCh37") -> dict:
     log.info("═══ Phase R: pharmaco panel reference ═══")
-    panel = panel if panel is not None else load_panel()
+    if panel is None:
+        build = vcf_kind(read_header(vcf_path), 0)["build"]
+        panel_build = build if build in PANEL_FILES else "GRCh37"
+        panel = load_panel(PANEL_FILES[panel_build])
+    # raw_snps — координаты чипа (GRCh37); для панели другой сборки пишем позиции из GRCh37-панели.
+    canon37 = panel if panel_build == "GRCh37" else load_panel(PANEL_FILES["GRCh37"])
     by_pos = {(p["chrom"], int(p["pos"])): rsid for rsid, p in panel.items()}
     header, found, records = [], {}, 0
     with open_vcf(vcf_path) as fh:
@@ -880,8 +926,10 @@ def phase_r_reference_fill(con, vcf_path: Path, dry: bool = False, panel: dict =
             if key in by_pos:
                 found[by_pos[key]] = cols
     kind = vcf_kind(header, records)
-    may_infer = bool(kind["wgs"] and kind["caller"] and kind["grch37"])
-    log.info(f"Phase R: {kind} → вывод «нет строки = норма» {'разрешён' if may_infer else 'запрещён'}")
+    # вывод «нет строки = норма» — только когда сборка файла совпала со сборкой панели
+    may_infer = bool(kind["wgs"] and kind["caller"] and kind["build"] == panel_build)
+    log.info(f"Phase R: {kind} panel={panel_build} → вывод «нет строки = норма» "
+             f"{'разрешён' if may_infer else 'запрещён'}")
 
     calls = {}                                    # rsid → (genotype, source)
     for rsid, p in panel.items():
@@ -921,7 +969,7 @@ def phase_r_reference_fill(con, vcf_path: Path, dry: bool = False, panel: dict =
             for rsid, (g, src) in calls.items():
                 if rsid in chip:                    # чип уже есть: не перетираем (сверка выше)
                     continue
-                p = panel[rsid]
+                p = canon37.get(rsid, panel[rsid])
                 con.execute("INSERT OR IGNORE INTO raw_snps (rsid,chromosome,position,genotype,source) "
                             "VALUES (?,?,?,?,?)", (rsid, p["chrom"], int(p["pos"]), g, src))
                 written += 1
@@ -943,6 +991,8 @@ def main():
     args = ap.parse_args()
 
     vcf_path = Path(args.vcf)
+    global VCF_SOURCE
+    VCF_SOURCE = vcf_path
     if any(p in args.phase for p in "ABR") or args.phase == "all":
         if not vcf_path.exists():
             log.error(f"VCF not found: {vcf_path}"); sys.exit(1)

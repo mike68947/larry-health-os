@@ -124,3 +124,71 @@ def test_выведенный_референс_норма_с_пониженно�
     assert res["DPYD"]["star_allele_1"] == res["DPYD"]["star_allele_2"]
     assert res["CYP2D6"]["confidence"] == "indeterminate"       # CYP2D6 не выводится никогда
     assert res["HLA-B"]["confidence"] == "indeterminate"
+
+
+# ── GRCh38 (2026-10-31): файл DRAGEN/Nucleus hg38 читается по панели своей сборки ─────────────
+HEAD_WGS38 = ["##fileformat=VCFv4.2", "##DRAGENCommandLine=<ID=dragen,Version=\"SW: 05.121\">",
+              "##contig=<ID=chr1,length=248956422>"]
+
+
+def test_панель_grch38_тот_же_набор_что_grch37():
+    p37, p38 = v.load_panel(v.PANEL_FILES["GRCh37"]), v.load_panel(v.PANEL_FILES["GRCh38"])
+    assert p37.keys() == p38.keys()
+    for rsid in p37:
+        assert (p37[rsid]["gene"], p37[rsid]["chrom"], p37[rsid]["ref"]) == \
+               (p38[rsid]["gene"], p38[rsid]["chrom"], p38[rsid]["ref"]), rsid
+        assert p37[rsid]["pos"] != p38[rsid]["pos"], rsid
+
+
+def test_сборка_читается_из_заголовка():
+    assert v.vcf_kind(HEAD_WGS, 0)["build"] == "GRCh37"
+    assert v.vcf_kind(HEAD_WGS38, 0)["build"] == "GRCh38"
+    assert v.vcf_kind(["##fileformat=VCFv4.2"], 0)["build"] is None
+
+
+def test_полный_геном_grch38_выводит_референс_по_панели_grch38(tmp_path):
+    """Без panel= фаза сама берёт панель по сборке файла; в raw_snps — координаты GRCh37 (чип)."""
+    con = _db()
+    out = v.phase_r_reference_fill(con, _vcf(tmp_path, HEAD_WGS38, [], filler=60))
+    assert out["may_infer"] and out["kind"]["build"] == "GRCh38"
+    rows = {r["rsid"]: r for r in con.execute("SELECT * FROM raw_snps")}
+    assert rows["rs4244285"]["genotype"] == "GG" and rows["rs4244285"]["source"] == v.SRC_INFERRED
+    assert rows["rs4244285"]["position"] == 96541616            # GRCh37, не 94781859
+
+
+def test_вариант_grch38_читается_по_координате_своей_сборки(tmp_path):
+    rows = ["chr10\t94781859\t.\tG\tA\t50\tPASS\t.\tGT:GQ:DP\t0/1:45:30"]   # rs4244285 в GRCh38
+    con = _db()
+    v.phase_r_reference_fill(con, _vcf(tmp_path, HEAD_WGS38, rows, filler=5))
+    assert _src(con) == {"rs4244285": ("GA", v.SRC_PANEL)}
+
+
+def test_панель_grch37_на_файле_grch38_не_выводит_и_не_совпадает(tmp_path):
+    """Явно переданная GRCh37-панель на hg38-файле: координата rs4244285 (GRCh38) ей неизвестна."""
+    rows = ["chr10\t94781859\t.\tG\tA\t50\tPASS\t.\tGT:GQ:DP\t0/1:45:30"]
+    con = _db()
+    out = v.phase_r_reference_fill(con, _vcf(tmp_path, HEAD_WGS38, rows, filler=60), panel=PANEL)
+    assert not out["may_infer"] and _src(con) == {}
+
+
+def test_фазы_A_и_B_отказывают_на_grch38(tmp_path, monkeypatch):
+    """Чужая сборка — отказ с записью в журнал, ни одного запроса наружу."""
+    def _no_network(*a, **k):
+        raise AssertionError("myvariant.info вызван на GRCh38")
+    monkeypatch.setattr(v.requests, "post", _no_network)
+    con = _db(chip={"rs4244285": "GG"})
+    vcf = _vcf(tmp_path, HEAD_WGS38, ["chr1\t1\t.\tA\tG\t50\tPASS\t.\tGT:GQ:DP\t0/1:45:30"], filler=60)
+    assert v.phase_a_update_known(con, vcf) == {}
+    v.phase_b_discover_new(con, vcf)
+    log_rows = con.execute("SELECT phase, step, status FROM vcf_import_log ORDER BY phase").fetchall()
+    assert [tuple(r) for r in log_rows] == [("A", "refused", "error"), ("B", "refused", "error")]
+    assert _src(con) == {"rs4244285": ("GG", "23andme")}
+
+
+def test_genome_imports_хранит_фактический_vcf(monkeypatch):
+    """Провенанс: в genome_imports пишется файл прогона (--vcf), а не путь по умолчанию
+    (до 2026-10-31 записывался несуществующий data/genome.vcf при фактическом genome.vcf.gz)."""
+    con = _db()
+    monkeypatch.setattr(v, "VCF_SOURCE", v.Path("/t/genome.vcf.gz"))
+    v.phase_e_pharmaco(con)
+    assert [r[0] for r in con.execute("SELECT vcf_source FROM genome_imports")] == ["/t/genome.vcf.gz"]
