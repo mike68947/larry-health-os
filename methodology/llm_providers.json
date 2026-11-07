@@ -24,6 +24,14 @@
      "measured": "2026-10-04: adaptive принят, enabled — 400; без параметра не думает; temperature без думания — 400 («deprecated for this model»), 04.10",
      "temperature": "rejected"
     },
+    "claude-opus-4-8": {
+     "think": {
+      "type": "adaptive"
+     },
+     "no_think": null,
+     "measured": "2026-10-31: без параметра не думает (трудная задача — только text); disabled принят; adaptive принят и думает; enabled — 400 («use adaptive»); between_tools — 400; temperature — 400 («deprecated for this model»). Допущена владельцем 21.10 без записи здесь — найдено полным прогоном при выгрузке вердиктов в таблицу выпуска",
+     "temperature": "rejected"
+    },
     "claude-haiku-4-5": {
      "think": {
       "type": "enabled",

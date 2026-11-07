@@ -158,6 +158,31 @@ def is_account_problem(exc: BaseException) -> bool:
     return any(m in text for m in _ACCOUNT_MARKERS)
 
 
+def provider_title(prov: "str | None" = None) -> str:
+    """Имя поставщика для человека («Anthropic отказал …»)."""
+    p = prov or provider()
+    return {"anthropic": "Anthropic", "openai": "OpenAI", "gemini": "Gemini",
+            "deepseek": "DeepSeek"}.get(p, p)
+
+
+def fault_person_key(exc: BaseException, default: str) -> "tuple[str, dict]":
+    """Строка человеку о сбое вызова модели: отказ по ключу или счёту — его строка (чинит
+    человек: пополнить баланс, поднять лимит, сменить ключ), иначе `default`.
+    Карточка report:90fb8f (24.10, v0.2.4): утренний отчёт упал на 400 в думающем вызове,
+    текста ошибки в отчёте нет; ГИПОТЕЗА — отказ по счёту (у той же установки 23.10 был 400
+    «usage limits»). Если так, человеку уходило «починка не работает» — с этим ему делать нечего.
+    Частота запросов — не счёт: «RESOURCE_EXHAUSTED … per minute, retry in 30s» у Gemini
+    ловит общий маркер is_account_problem, но совет «пополните баланс» там ложный."""
+    if is_account_problem(exc) and not any(m in str(exc).lower() for m in _RATE_MARKERS):
+        return "person.llm.key_problem", {"provider": provider_title()}
+    return default, {}
+
+
+# Признаки ограничения ЧАСТОТЫ (временного), а не счёта — по известным текстам 429 трёх SDK.
+_RATE_MARKERS = ("per minute", "per-minute", "rate limit", "rate_limit", "retry in",
+                 "requests per")
+
+
 # Временный отказ поставщика (нить file-outcome, 06.10): живой прогон на OpenAI — пять документов
 # подряд упали за секунды, через 40 минут те же пять прошли. SDK уже повторяет сам (max_retries=2
 # по умолчанию у openai и anthropic), значит перебой длиннее его повторов. Классы — по именам в

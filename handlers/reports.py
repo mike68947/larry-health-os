@@ -16,6 +16,7 @@ from _time_inject import get_today  # seam
 
 import i18n
 from _fmt_helpers import fmt_count
+import llm_client
 import notify
 
 from telegram import Update
@@ -39,7 +40,8 @@ async def cmd_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
         report, sn_result = await asyncio.to_thread(gp.generate_daily_report, target)
     except Exception as e:
         log.error(f"Ошибка cmd_report: {e}", exc_info=True)
-        report = await notify.afault(f"handlers/reports.py:cmd_report: {type(e).__name__}: {e}", person_key="reports.error.not_ready")
+        _key, _kw = llm_client.fault_person_key(e, "reports.error.not_ready")
+        report = await notify.afault(f"handlers/reports.py:cmd_report: {type(e).__name__}: {e}", person_key=_key, **_kw)
         sn_result = {"max_level": None, "urgent_message": ""}
     if sn_result and sn_result.get("max_level") in ("urgent", "critical"):
         await send_md(update.message.get_bot().send_message, chat_id=chat_id, text=sn_result["urgent_message"])
@@ -57,7 +59,8 @@ async def cmd_weekly(update: Update, context: ContextTypes.DEFAULT_TYPE):
         header = i18n.t("reports.reply.weekly_heading", report=report)
     except Exception as e:
         log.error(f"Ошибка cmd_weekly: {e}", exc_info=True)
-        header = await notify.afault(f"handlers/reports.py:cmd_weekly: {type(e).__name__}: {e}", person_key="reports.error.not_ready")
+        _key, _kw = llm_client.fault_person_key(e, "reports.error.not_ready")
+        header = await notify.afault(f"handlers/reports.py:cmd_weekly: {type(e).__name__}: {e}", person_key=_key, **_kw)
         await send_long(update.message.get_bot(), update.effective_chat.id, header)
         return
     await send_long(update.message.get_bot(), update.effective_chat.id, header)
@@ -81,7 +84,8 @@ async def cmd_monthly(update: Update, context: ContextTypes.DEFAULT_TYPE):
         header = i18n.t("reports.reply.monthly_heading", report=report)
     except Exception as e:
         log.error(f"Ошибка cmd_monthly: {e}", exc_info=True)
-        header = await notify.afault(f"handlers/reports.py:cmd_monthly: {type(e).__name__}: {e}", person_key="reports.error.not_ready")
+        _key, _kw = llm_client.fault_person_key(e, "reports.error.not_ready")
+        header = await notify.afault(f"handlers/reports.py:cmd_monthly: {type(e).__name__}: {e}", person_key=_key, **_kw)
     await send_long(update.message.get_bot(), update.effective_chat.id, header)
     asyncio.create_task(_send_problem_proposals(
         update.message.get_bot(), update.effective_chat.id

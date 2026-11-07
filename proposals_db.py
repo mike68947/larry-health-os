@@ -253,6 +253,21 @@ def apply_proposal(proposal_id: int) -> int:
                 # problem_id придумывает модель и переиспользует (один id у двух разных проблем):
                 # занятый id — не дубль ПРОБЛЕМЫ, а коллизия имени → свой slug из заголовка.
                 _pid = _src.get("problem_id") or _src.get("id") or ""
+                # NOT NULL problem_id/title/status (карточка report:05cd86): id мог прийти ключом
+                # "id", заголовка и статуса модель может не дать вовсе или дать null.
+                if not _src.get("title"):
+                    # Описание ПЕРЕНОСИТСЯ в заголовок, а не копируется: дубль судится по
+                    # title+description сохранённой строки, и копия дала бы ключ «описание описание»,
+                    # не равный ключу того же предложения при повторе.
+                    _d = str(_src.get("description") or "").strip()
+                    _src["title"], _src["description"] = ((_d[:120], _d if len(_d) > 120 else None)
+                                                          if _d else (_pid or "problem", None))
+                _src["status"] = _src.get("status") or "active_monitoring"
+                # Повтор ТОГО ЖЕ предложения (двойное «одобрить»): без текста ключа дубля нет,
+                # а id занят этой же строкой — не коллизия имени, а уже применённая запись.
+                if not dup and _pid:
+                    dup = conn.execute("SELECT problem_id FROM problem_list WHERE problem_id=? "
+                                       "AND source=?", (_pid, f"proposal:{proposal_id}")).fetchone()
                 _taken = conn.execute("SELECT 1 FROM problem_list WHERE problem_id=?", (_pid,)).fetchone()
                 if not dup and (not _pid or _taken):
                     import re as _re
@@ -260,7 +275,7 @@ def apply_proposal(proposal_id: int) -> int:
                     _pid, _k = _base, 2
                     while conn.execute("SELECT 1 FROM problem_list WHERE problem_id=?", (_pid,)).fetchone():
                         _pid, _k = f"{_base}_{_k}", _k + 1
-                    _src["problem_id"] = _pid
+                _src["problem_id"] = _pid
                 exists = dup
                 if not exists:
                     from datetime import timedelta as _td3

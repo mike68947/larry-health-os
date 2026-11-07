@@ -157,7 +157,7 @@ def _snapshot_trend_rows() -> dict:
     """Резерв трендов = RCV из снимка EFLM (тот же вывод, что в сиде health_db._seed_lab_trend_thresholds)."""
     import norm_documents
     if not norm_documents.EFLM_SNAPSHOT.exists():
-        return {}   # чистая установка без снимка: резерва нет, loader кричит при пустой БД
+        return {}   # установка без снимка: резерва нет; оператору — один раз (_note_eflm_absent)
     snap = norm_documents.load_eflm()
     conv = {"CEA": ("up", URGENT), "CA19-9": ("up", URGENT), "HGB": ("down", WARN),
             "MCV": ("up", WARN), "Albumin": ("down", WARN)}
@@ -227,6 +227,10 @@ def _load_lab_thresholds() -> dict:
         rows = [t for t in rules_db.get_absolute_thresholds()
                 if t.get("variant") == "safety_net" and t["metric"] not in _LIFESTYLE_M2K]
         if not rows:
+            import norm_documents
+            if not norm_documents.CTCAE_SNAPSHOT.exists():
+                _note_ctcae_absent()
+                return _FALLBACK_LAB
             raise ValueError("нет safety_net-строк в absolute_thresholds")
         out: dict = {}
         for t in rows:
@@ -269,12 +273,59 @@ def _resolve_thresholds(rows: list[dict], ref_low, ref_high) -> tuple | None:
     return (*vals, unit, note)
 
 
+_EFLM_ABSENT_MARK = "eflm_absent_noticed"   # отметка «оператору сказано» — рядом с журналом недельной сводки
+
+
+def _note_eflm_absent() -> None:
+    _note_snapshot_absent(_EFLM_ABSENT_MARK, "owner.weekly.eflm_absent")
+
+
+_CTCAE_ABSENT_MARK = "ctcae_absent_noticed"
+
+
+def _note_ctcae_absent() -> None:
+    """Тот же класс для CTCAE (карточка report:5bf1da, 01.11): снимок в публичную версию не
+    входит (NOTICE.md), _seed_safety_lab_thresholds строк не сеет — пустота штатная, не fault."""
+    _note_snapshot_absent(_CTCAE_ABSENT_MARK, "owner.weekly.ctcae_absent")
+
+
+def _note_snapshot_absent(mark_name: str, text_key: str) -> None:
+    """Установка без снимка EFLM — штатное состояние, а не сбой (нить eflm-install-fetch, 31.10).
+
+    Снимок не едет в репозиторий, и установка не качает его сама: условия EFLM разрешают
+    скачивать выдержки для личного некоммерческого использования, но запрещают хранить их
+    «в иной электронной поисковой системе», а про API не говорят ничего (NOTICE.md, прочитано
+    31.10). Поэтому решать оператору. До этой правки пустая lab_trend_thresholds у такой
+    установки уходила в notify.fault каждым процессом — ежедневная карточка /bug (отпечаток
+    00c93e). Теперь оператор узнаёт ОДИН раз строкой недельной сводки; отметка в каталоге
+    журнала сводки не даёт повторить. Никогда не бросает: подсказка не важнее проверок."""
+    try:
+        import i18n
+        import notify
+        mark = notify.weekly_path().parent / mark_name
+        if mark.exists():
+            return
+        # Отметка — только по квитанции записи: отказ журнала не гасит сообщение навсегда,
+        # следующий процесс попробует снова (ревью ночного ремонта 01.11).
+        if not notify.weekly(i18n.t(text_key)):
+            return
+        mark.parent.mkdir(parents=True, exist_ok=True)
+        mark.write_text("1", encoding="utf-8")
+    except Exception as e:  # noqa: BLE001 — подсказка best-effort; лог остаётся
+        log.warning(f"_note_snapshot_absent({mark_name}): {type(e).__name__}: {e}")
+
+
 def _load_lab_trend_thresholds() -> dict:
-    """Пороги лаб-трендов из lab_trend_thresholds. Пусто/ошибка → _FALLBACK_LAB_TREND + алерт."""
+    """Пороги лаб-трендов из lab_trend_thresholds. Пусто/ошибка → _FALLBACK_LAB_TREND + алерт.
+    Пусто И нет снимка EFLM — не сбой: порогов без документа нет по замыслу (_note_eflm_absent)."""
     try:
         import rules_db
         rows = rules_db.get_lab_trend_thresholds()
         if not rows:
+            import norm_documents
+            if not norm_documents.EFLM_SNAPSHOT.exists():
+                _note_eflm_absent()
+                return _FALLBACK_LAB_TREND
             raise ValueError("нет lab_trend_thresholds")
         import lab_canon
         return {lab_canon.normalize(t["metric"]): {

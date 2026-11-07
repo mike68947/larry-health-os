@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import bug_report
+from _time_inject import get_now
 
 KEEP = timedelta(days=90)          # решение владельца 19.10
 PER_INSTALL_DAY = 5
@@ -49,7 +50,7 @@ def _db() -> sqlite3.Connection:
 
 def accept(raw: bytes, now: datetime | None = None) -> tuple[int, dict]:
     """Суд над одним телом запроса → (код, ответ). Вся логика приёма здесь, HTTP — обёртка."""
-    now = now or datetime.now(timezone.utc)
+    now = now or get_now(timezone.utc)
     if len(raw) > bug_report.MAX_BYTES:
         return 413, {}
     try:

@@ -379,11 +379,14 @@ def weekly_path() -> Path:
                 Path(__file__).resolve().parent / "logs" / "owner_weekly.jsonl")
 
 
-def weekly(line: str) -> None:
+def weekly(line: str) -> bool:
     """Одна строка к сведению, БЕЗ медицинских данных. Доставка — owner_weekly.run.
 
     Журнал не обрезаем: ещё не доставленные события должны пережить отказ канала.
     Ошибка записи остаётся в журнале сбоев, исходный текст туда не копируется.
+    Возврат — квитанция записи: True, только если строка легла в журнал (fsync). Вызывающий,
+    который пишет «один раз» (safety_net._note_snapshot_absent), ставит отметку по ней — иначе
+    отказ записи гасил бы единственное сообщение навсегда (ревью ночного ремонта 01.11).
     """
     import fcntl
     import json
@@ -392,7 +395,7 @@ def weekly(line: str) -> None:
     try:
         text = " ".join(line.split())[:280]
         if not text:
-            return
+            return False
         path = weekly_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a+", encoding="utf-8") as journal:
@@ -401,8 +404,10 @@ def weekly(line: str) -> None:
                                      ensure_ascii=False) + "\n")
             journal.flush()
             os.fsync(journal.fileno())
+        return True
     except Exception as exc:
         fault(f"notify.weekly: journal write failed ({type(exc).__name__})", person_key=None)
+        return False
 
 
 def _deliver(msg: str, fallback: bool, secrets, reply_markup=None) -> str:

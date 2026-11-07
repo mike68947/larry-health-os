@@ -178,7 +178,10 @@ if [[ "$SCHEDULED" == "true" ]]; then
         fi
         echo "$(date '+%Y-%m-%d %H:%M:%S') [scheduled $TAG] ${SUMMARY:-0 FAIL}" >> "$LOG"
         if [[ -n "$SUMMARY" ]]; then
-            "$PY" -c 'import notify; notify.fault("run_checks.tenant_integrity: tenant integrity failed; see tenant artifact", person_key=None)' || true
+            # Оператору — ИМЕНА упавших проверок, но через finding_key: цифры → N, значения
+            # данных не уходят (31.10, карточка ночного ремонта fb0913fe: карточка была пустой).
+            TKEYS=$(echo "$TJSON" | $PY -c "import sys,json,finding_identity as fi; print('; '.join(sorted({fi.finding_key(f[0]) for f in json.load(sys.stdin).get('failures') or []}))[:600])" 2>/dev/null)
+            TKEYS="$TKEYS" "$PY" -c 'import os, notify; notify.fault("run_checks.tenant_integrity: tenant integrity failed: " + (os.environ.get("TKEYS") or "see tenant artifact"), person_key=None)' || true
         fi
         $PY oura_freshness_check.py --notify >> "$LOG" 2>&1 || true
         $PY model_health_check.py --daily --notify >> "$LOG" 2>&1 || true

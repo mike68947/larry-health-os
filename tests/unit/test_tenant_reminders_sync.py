@@ -40,6 +40,9 @@ def sync(monkeypatch, tmp_path, request):
     spec = importlib.util.spec_from_file_location("_tenant_reminders_sync", source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    # Эти тесты судят МЕХАНИКУ AppleScript-пути (какой список, экранирование, сбои). Кому этот
+    # путь вообще разрешён — отдельный предмет: test_reminders_machine_account.py (31.10).
+    monkeypatch.setattr(module, "native_allowed", lambda: True)
     return SimpleNamespace(module=module, db=db, home=tmp_path,
                            data_dir=data_dir, file_handler=file_handler, run=run)
 
@@ -133,6 +136,7 @@ def test_writer_puts_tenant_task_into_tenant_list(monkeypatch):
     import task_agent
     import reminders_sync
     monkeypatch.setattr(reminders_sync, "reminders_list_name", lambda: "Health (demo_alpha)")
+    monkeypatch.setattr(reminders_sync, "native_allowed", lambda: True)   # механика, не допуск
     seen = []
 
     def run(args, **kwargs):

@@ -51,7 +51,9 @@ def test_ночная_проверка_человека_пишет_к_нему_�
         "def fault(msg, person_key=None):\n    open('fault.txt', 'w').write(msg)\n")
     (work / "oura_freshness_check.py").write_text("")
     (work / "memory_truthcheck.py").write_text("def apply_confirmations():\n    return {'bumped': 0}\n")
-    report = '{"pass": 3, "fail": 1, "warn": 0, "failures": [["лаб-история усохла", "8 < 120"]]}'
+    shutil.copy(root / "finding_identity.py", work / "finding_identity.py")
+    report = ('{"pass": 3, "fail": 2, "warn": 0, "failures": [["лаб-история усохла", "8 < 120"], '
+              '["сдвиг 37 дней", "x"]]}')
     real = shutil.which("python3.11") or shutil.which("python3")
     stub = tmp_path / "py.sh"
     stub.write_text("#!/bin/bash\ncase \"$*\" in\n  *integrity_tests.py*--json*)\n"
@@ -64,4 +66,6 @@ def test_ночная_проверка_человека_пишет_к_нему_�
     assert not (work / "logs" / "integrity_latest.json").exists()
     msg = (work / "fault.txt").read_text()
     assert "tenant integrity failed" in msg and "120" not in msg
+    # 31.10 (fb0913fe): имя проверки доходит до оператора, число из метки — нет
+    assert "лаб-история усохла" in msg and "сдвиг N дней" in msg and "37" not in msg
     assert not (work / "operator.txt").exists()

@@ -159,7 +159,11 @@ def test_lab_fallback_on_empty_source(monkeypatch):
     assert "lab_abs" in called, "не эмитил громкий fallback-алерт"
 
 
-def test_lab_trend_fallback_on_empty_source(monkeypatch):
+def test_lab_trend_fallback_on_empty_source(monkeypatch, tmp_path):
+    # снимок EFLM ЕСТЬ (путь подменён, §20): без снимка пустота — штатная, см. test_eflm_absent_not_fault
+    import norm_documents
+    (tmp_path / "eflm_bv.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(norm_documents, "EFLM_SNAPSHOT", tmp_path / "eflm_bv.json")
     monkeypatch.setattr(rules_db, "get_lab_trend_thresholds", lambda *a, **k: [])
     sn._FALLBACK_ALERTED.clear()
     called = []

@@ -2,11 +2,14 @@
   "module": "llm_client",
   "public": [
     "api_key",
+    "fault_person_key",
     "guard_outgoing",
     "guarded_client",
+    "is_account_problem",
     "is_model_not_found",
     "profiles",
-    "provider"
+    "provider",
+    "provider_title"
   ],
   "depends_on": [
     {

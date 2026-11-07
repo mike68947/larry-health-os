@@ -771,12 +771,24 @@ def create_macos_reminder(task: dict) -> bool:
             log.warning(f"Reminder CalDAV error: {e}")
             return False
 
+    from reminders_sync import native_allowed, NO_CHANNEL
+    if not native_allowed():   # iCloud машины — оператора; чужие задачи туда не пишем (31.10)
+        from secrets_paths import is_owner
+        if is_owner():   # оператор без macOS и без CalDAV: напоминания не подключены, задача — в боте
+            log.info("Reminders не подключены — напоминание не создаётся")
+            return False
+        import notify
+        notify.fault(f"task_agent: напоминание #{task.get('id')} не создано — {NO_CHANNEL}", person_key=None)
+        return False
+
     # Экранируем для AppleScript
     def esc(s):
         return s.replace("\\", "\\\\").replace('"', '\\"') if s else ""
 
-    # Дата через компоненты — не зависит от системной локали
+    # Дата через компоненты — не зависит от системной локали. Час — тот же, что у CalDAV
+    # (reminders.alarm_hour): до 31.10 здесь стояла полночь, и напоминание будило ночью.
     rl = esc(_reminders_list())
+    at = reminders_backend.alarm_at()
     script = f'''
 tell application "Reminders"
     if not (exists list "{rl}") then
@@ -789,7 +801,7 @@ tell application "Reminders"
     set year of d to {dl.year}
     set month of d to {dl.month}
     set day of d to {dl.day}
-    set time of d to 0
+    set time of d to {at.hour * 3600 + at.minute * 60}
     set due date of r to d
     return "OK"
 end tell'''

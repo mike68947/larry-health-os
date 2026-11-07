@@ -1696,6 +1696,9 @@ b3ade3aecd34:
 b3f9a68346a3:
   ru: 'daily_spo2: spo2_percentage.average (число %), breathing_disturbance_index.'
   en: 'daily_spo2: spo2_percentage.average (number %), breathing_disturbance_index.'
+b40ee1f571e2:
+  ru: Нативный путь (AppleScript → Reminders.app) пишет и читает iCloud-аккаунт МАШИНЫ, а он
+  en: The native path (AppleScript → Reminders.app) reads and writes the MACHINE's iCloud account, and it
 b4ba6e23da8a:
   ru: PRS синхронизированы с геномом (WFR, Phase H)
   en: PRS synchronized with genome (WFR, Phase H)

@@ -31,6 +31,14 @@
       ],
       "why": "где искать файлы подключений (только наличие)",
       "legacy": "secrets_paths — легаси вне периметра §15"
+    },
+    {
+      "module": "_time_inject",
+      "uses": [
+        "get_now"
+      ],
+      "why": "окно журнала сбоев (FAULT_WINDOW_DAYS) от «сейчас»",
+      "legacy": "у _time_inject нет сайдкара — легаси-seam времени вне периметра §15"
     }
   ],
   "disposability": {

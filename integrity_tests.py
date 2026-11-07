@@ -9330,13 +9330,16 @@ def check_profile_reconciler_fresh():
     """
     import sqlite3 as _sq
     import profile_reconciler as _pr
+    from _time_inject import get_today as _today
     for path in _tenant_db_paths(include_current=True):
         tag = Path(path).parent.parent.name
         if not Path(path).exists():
             continue  # база тенанта недоступна — её стережёт check_tenant_dbs_reachable
         try:
             conn = _sq.connect(f"file:{path}?mode=ro", uri=True)
-            diverged = _pr.drift(conn)
+            # lagging, не drift (2026-11-01): сегодняшний замер сводит завтрашний прогон —
+            # его расхождение ожидание, а не отставший ремонтник; вчерашний — уже долг.
+            diverged = _pr.lagging(conn, _today())
             conn.close()
         except _sq.Error as e:
             warn(f"датчик профиля не прочитал базу тенанта {tag}", str(e)[:120])

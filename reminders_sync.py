@@ -26,6 +26,21 @@ def reminders_list_name() -> str:
     return f"Health ({name})"
 
 
+def native_allowed() -> bool:
+    """Нативный путь (AppleScript → Reminders.app) пишет и читает iCloud-аккаунт МАШИНЫ, а он
+    принадлежит оператору установки. Любому другому человеку он чужой: замер 31.10 — задачи
+    партнёра без своего caldav.json уходили в iCloud владельца и всплывали у него на телефоне
+    (имя списка своё, аккаунт общий). Без своего CalDAV у не-оператора канала напоминаний нет.
+    И только там, где есть osascript: в Linux-контейнере постороннего его нет (отчёты /bug
+    20–30.10, отпечаток 986fbe — 56 сбоев за неделю у одной установки)."""
+    import shutil
+    from secrets_paths import is_owner
+    return is_owner() and shutil.which("osascript") is not None
+
+
+NO_CHANNEL = "у этого человека нет своего канала напоминаний (caldav.json) — нативный путь пишет в iCloud оператора"
+
+
 def _log_path() -> Path:
     """Preserve the owner's log path and isolate other tenants' logs."""
     if is_owner_data():
@@ -74,6 +89,12 @@ def get_completed_task_ids() -> list[int]:
             return reminders_backend.completed_task_ids(reminders_list_name())
         except Exception as e:  # noqa: BLE001 — сеть/сервер: громко, как ошибка AppleScript ниже
             return _unread(f"CalDAV: {e}")
+    if not native_allowed():
+        from secrets_paths import is_owner
+        if is_owner():   # оператор без macOS и без CalDAV — напоминания просто не подключены
+            log.info("Reminders не подключены (нет caldav.json и osascript) — читать нечего")
+            return []
+        return _unread(NO_CHANNEL)
     list_name = reminders_list_name().replace("\\", "\\\\").replace('"', '\\"')
     script = f'''
 tell application "Reminders"

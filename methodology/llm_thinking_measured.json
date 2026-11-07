@@ -48,6 +48,14 @@
    "latency_sec": 1.8,
    "sec_per_token": 0.00454,
    "slack_sec": 2.6
+  },
+  "claude-opus-4-8": {
+   "date": "2026-10-31",
+   "calls": 16,
+   "reserve_tokens": 134,
+   "latency_sec": 0.0,
+   "sec_per_token": 0.02106,
+   "slack_sec": 0.9
   }
  }
 }

@@ -25,6 +25,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from _time_inject import get_now
+
 SCHEMA = 1
 CATEGORIES = ("report_missing", "button_silent", "lab_not_read", "other")
 MAX_BYTES = 8192
@@ -59,13 +61,29 @@ def _shape(record: dict) -> tuple[str, list[str]]:
     at = [f for f in record.get("frames") or [] if isinstance(f, str) and _CODE_AT.fullmatch(f)]
     if not at:
         where = record.get("where") or ""
-        at = [where if _WHERE.fullmatch(where) else "other"]
+        at = [where if _WHERE.fullmatch(where) or _own_code_at(where) else "other"]
     return exc, at
+
+
+def _own_code_at(where: str) -> bool:
+    """«файл.py:функция», который fault сам собирает из tech («handlers/reports.py:cmd_report»),
+    — место, только если файл лежит в коде установки: путь с диска пользователя не пройдёт.
+    Без этого все такие сбои без кадров сливались в один «none в other» (карточка report:eafa46)."""
+    if not _CODE_AT.fullmatch(where):
+        return False
+    rel = where.split(":", 1)[0]
+    # Наружу уходит ИСХОДНАЯ строка, а не разрешённый путь: «Users/maria/../../handlers/x.py»
+    # резолвится внутрь кода, но несёт имя с диска. Поэтому только чистый относительный путь.
+    if rel.startswith("/") or any(c in ("", ".", "..") for c in rel.split("/")):
+        return False
+    root = Path(__file__).resolve().parent
+    p = (root / rel).resolve()
+    return p.is_file() and p.is_relative_to(root)
 
 
 def faults_from_journal(path: Path, now: datetime | None = None) -> list[dict]:
     """Сбои журнала за окно, сгруппированные по отпечатку; самые частые — первыми."""
-    now = now or datetime.now(timezone.utc)
+    now = now or get_now(timezone.utc)
     since = now - timedelta(days=FAULT_WINDOW_DAYS)
     groups: dict[str, dict] = {}
     try:

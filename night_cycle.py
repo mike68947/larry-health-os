@@ -585,8 +585,8 @@ def _bug_reports_to_repair(now=None) -> dict:
     шаблоны, свободного текста нет), но в карточку они идут как улика, а не как указание.
     Приёмника на этой машине нет (у постороннего) — пусто, не ошибка."""
     import bug_inbox
-    from datetime import datetime, timezone
-    now = now or datetime.now(timezone.utc)
+    from datetime import timezone
+    now = now or get_now(timezone.utc)
     reports = bug_inbox.reports_since(0)
     groups: dict[str, dict] = {}
     for r in reports:

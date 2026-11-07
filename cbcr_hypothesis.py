@@ -336,6 +336,36 @@ def _build_user_prompt(observation: dict) -> str:
     )
 
 
+# Поля, которые API принимает НА ВХОДЕ у блока хода ассистента. Ответ SDK несёт больше:
+# у ParsedTextBlock (anthropic 0.92) model_dump() даёт и `parsed_output: None`, а на повторе
+# API отвечает 400 «messages.1.content.1.text.parsed_output: Extra inputs are not permitted».
+# Замер 26.10 (survivorship_partner.log, два запроса подряд): гипотеза терялась целиком.
+_INPUT_FIELDS = {
+    "text": ("type", "text", "citations"),
+    "thinking": ("type", "thinking", "signature"),
+    "redacted_thinking": ("type", "data"),
+    # provider_raw — не поле API: его кладёт llm_translate чужому провайдеру и сам же читает
+    # на обратном переводе; у ответа Anthropic его нет, значит и в запрос он не попадёт.
+    "tool_use": ("type", "id", "name", "input", "provider_raw"),
+}
+
+
+def _assistant_history(blocks) -> list[dict]:
+    """Блоки ответа → content хода ассистента в истории tool-loop: только входные поля
+    (см. _INPUT_FIELDS), None не передаётся. Пустой/пробельный текст выбрасывается: API
+    требует непустой текстовый блок, а смысла он не несёт. Незнакомый тип — без None-полей."""
+    out = []
+    for b in blocks:
+        # exclude_none не годится: он чистит и None ВНУТРИ input инструмента — фильтр по верху.
+        d = b.model_dump() if hasattr(b, "model_dump") else dict(b)
+        keep = _INPUT_FIELDS.get(d.get("type")) or tuple(d)
+        d = {k: d[k] for k in keep if d.get(k) is not None}
+        if d.get("type") == "text" and not (d.get("text") or "").strip():
+            continue
+        out.append(d)
+    return out
+
+
 def _execute_tool_call(name: str, tool_input: dict) -> str:
     if name == "read_cbcr_concept":
         return read_cbcr_concept(tool_input.get("name", ""))
@@ -385,7 +415,7 @@ def generate_hypothesis(observation: dict) -> dict:
                         "content": result,
                     })
             # Накапливаем history: assistant turn + user turn с tool_results
-            messages.append({"role": "assistant", "content": [b.model_dump() for b in assistant_blocks]})
+            messages.append({"role": "assistant", "content": _assistant_history(assistant_blocks)})
             messages.append({"role": "user", "content": tool_results})
             continue
 
@@ -804,7 +834,7 @@ def critique_hypothesis(hypothesis: dict, observation: dict | None = None) -> di
                         "tool_use_id": block.id,
                         "content": _execute_tool_call(block.name, block.input),
                     })
-            messages.append({"role": "assistant", "content": [b.model_dump() for b in assistant_blocks]})
+            messages.append({"role": "assistant", "content": _assistant_history(assistant_blocks)})
             messages.append({"role": "user", "content": tool_results})
             continue
         text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")

@@ -2,7 +2,7 @@
 
 # ARCH_SNAPSHOT — Larry Health OS
 
-**Версия:** 15.430 | **Дата:** 2026-10-23
+**Версия:** 15.433 | **Дата:** 2026-11-01
 
 <!-- AUTO-READABLE ARCHITECTURE INDEX. Строку выше пишет doc_agent на post-commit
      (переехала из BLUEPRINT.md 2026-08-03, файл удалён) — руками не править. -->
@@ -344,7 +344,7 @@ checkins_fts       -- виртуальная FTS5 таблица для полн
 <!-- GEN:MODULE_REGISTRY:START -->
 
 ## МОДУЛЬНЫЙ РЕЕСТР
-<!-- Авто-генерировано gen_blueprint.py 2026-10-23 -->
+<!-- Авто-генерировано gen_blueprint.py 2026-10-31 -->
 
 ### СЛОЙ ДАННЫХ
 ```
@@ -808,6 +808,7 @@ checkin_agent.py
 
 reminders_sync.py  # reminders_sync.py — синхронизация macOS Reminders → SQLite.
   reminders_list_name() — Owner keeps Health; other tenants use their data-directory suffix
+  native_allowed() — Нативный путь (AppleScript → Reminders.app) пишет и читает iCloud
   get_completed_task_ids() — Читает выполненные напоминания из списка текущего тенанта через A
   sync_completed_reminders()
 
@@ -1214,6 +1215,7 @@ hypothesis_resolution        → _time_inject, hai_hypotheses, health_db, hypoth
 lab_promote                  → _time_inject, config_db, health_db, lab_canon, lab_oracles, labs_db
 labs_db                      → _time_inject, clinical_kb, health_db, i18n, lab_canon, safety_net
 memory_consolidation         → beliefs, hai_core, health_db, i18n, llm_client, memory_facts_db
+bug_report                   → _time_inject, health_db, notify, screen_trace, secrets_paths
 cbcr_hypothesis              → _time_inject, cbcr_lookup, gp_agent, hai_core, llm_client
 dashboard                    → daemon_liveness, dashboard_db, dashboard_state, health_db, infra_config
 env_context                  → brief_cards, config_db, env_sources, location_signal, region_pack
@@ -1225,7 +1227,6 @@ morning_test_summary         → _time_inject, health_db, infra_config, plist_en
 problems_db                  → _time_inject, clinical_kb, hai_core, health_db, llm_client
 publication_reader           → _time_inject, hai_core, health_db, llm_client, patient_context
 assessment_importer          → _time_inject, assessment_scheduler, health_db, i18n
-bug_report                   → health_db, notify, screen_trace, secrets_paths
 food_genome                  → clinical_kb, i18n, region_pack, seasonal_produce
 import_oura                  → health_db, infra_config, oura_oauth, secrets_paths
 import_withings              → health_db, notify, region_pack, withings_api
@@ -1245,6 +1246,7 @@ symptom_intake               → hai_core, hai_hypotheses, i18n, visual_db
 backfill_effect_alleles      → effect_allele, genome_annotator, health_db
 backfill_hae_coverage        → _time_inject, hae_checker, health_db
 belief_contract              → _time_inject, health_db, secrets_paths
+bug_outbox                   → _time_inject, bug_report, health_db
 check_contracts              → health_db, infra_config, secrets_paths
 check_wellally_updates       → _time_inject, i18n, notify
 clinical_kb                  → _time_inject, health_db, i18n
@@ -1272,6 +1274,7 @@ memory_facts_db              → beliefs, health_db, memory_salience
 profile_db                   → _time_inject, health_db, treatment_summary
 profile_reconciler           → _time_inject, health_db, import_all
 reminders_backend            → _time_inject, config_db, secrets_paths
+screen_trace                 → _time_inject, i18n, secrets_paths
 smoke_tests                  → gp_agent, health_ai, health_db
 survivorship_analyzer        → _time_inject, assessment_scheduler, health_db
 treatment_extractor          → hai_core, health_db, llm_client
@@ -1279,7 +1282,7 @@ backfill_critical_flag       → health_db, memory_salience
 beliefs                      → health_db, memory_facts_db
 brief_cards                  → hai_analysis, metrics_db
 brief_state                  → brief_gate, config_db
-bug_outbox                   → bug_report, health_db
+bug_inbox                    → _time_inject, bug_report
 calendar_client              → _time_inject, secrets_paths
 calendar_sync                → _time_inject, health_db
 correlation_gate             → lab_canon, signal_family
@@ -1314,7 +1317,6 @@ protocols_db                 → _time_inject, health_db
 prs_pipeline                 → _time_inject, pgs_reference
 quarantine_db                → health_db, signal_family
 repertoire                   → i18n, taste
-screen_trace                 → i18n, secrets_paths
 security_sensors             → infra_config, plist_env_liveness
 service_trouble              → config_db, health_db
 tasks_db                     → gp_context, health_db
@@ -1326,7 +1328,6 @@ agent_reports_db             → health_db
 alerts_db                    → health_db
 api_spend_log                → _time_inject
 assessments_db               → health_db
-bug_inbox                    → bug_report
 checkins_db                  → health_db
 config_db                    → health_db
 constitutions_db             → health_db
@@ -1626,6 +1627,7 @@ XFAIL — известные баги, документированы как `pa
 ## ЛОГ АРХИТЕКТУРНЫХ ИЗМЕНЕНИЙ
 
 <!-- GEN:ARCH_LOG:START -->
+- `2026-10-31` — `bug_inbox` + зависимость: _time_inject; `bug_outbox` + зависимость: _time_inject; `bug_report` + зависимость: _time_inject; `screen_trace` + зависимость: _time_inject
 - `2026-10-23` — `gp_agent` + зависимость: notify; `problems_db` − зависимость: api_spend_log
 - `2026-10-20` — `gp_context` + зависимость: notify
 - `2026-10-19` — новый модуль `bug_inbox` (зависит от: bug_report); новый модуль `bug_outbox` (зависит от: bug_report, health_db); новый модуль `bug_report` (зависит от: health_db, notify, screen_trace, secrets_paths); `integrity_tests` + зависимость: bug_outbox (+3 изменений)

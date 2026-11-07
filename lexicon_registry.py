@@ -51,6 +51,10 @@ REGISTERED: dict[str, dict] = {
         "verdict": "structural", "oracle": "инженер",
         "note": "подстроки текстов ошибок SDK поставщиков (квота, баланс) — разбор формата чужого "
                 "API, не данные пациента (нить lab-intake-retry, 05.10)"},
+    "llm_client._RATE_MARKERS": {
+        "verdict": "structural", "oracle": "инженер",
+        "note": "подстроки текстов 429 SDK про частоту запросов (per minute, retry in) — разбор "
+                "формата чужого API, не данные пациента (карточка report:90fb8f, 31.10)"},
     "hai_context._FULL_CONTEXT_KEYWORDS": {
         "verdict": "structural", "oracle": "инженер",
         "note": "триггеры полного контекста — системное поведение, не данные пациента"},

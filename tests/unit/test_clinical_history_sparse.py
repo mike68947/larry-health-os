@@ -18,6 +18,9 @@ def test_empty_periods_degrade_and_leave_a_fault(monkeypatch, tmp_path, data_dir
     monkeypatch.setenv("HEALTH_FAULTS_JOURNAL", str(journal))
     monkeypatch.setattr(health_db, "historical_periods", lambda **k: [])
     monkeypatch.setenv("HEALTH_DATA_DIR", data_dir)
+    # Тенант без HEALTH_SECRETS_DIR — отказ secrets_dir (fail-closed), и запись журнала теряется;
+    # conftest задаёт каталог, только если HEALTH_DATA_DIR не пришёл из среды (§20).
+    monkeypatch.setenv("HEALTH_SECRETS_DIR", str(tmp_path / "secrets"))
     out = gp_context._build_clinical_history()
     assert "не заполнена" in out                          # отчёт собирается дальше
     rec = json.loads(journal.read_text(encoding="utf-8").splitlines()[-1])

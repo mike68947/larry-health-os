@@ -1835,10 +1835,10 @@ lessons:
     text: 'при слиянии нити подъёмы судятся по её коммитам по порядку (intent_registry.promotions_in_merge), если итог слияния равен вершине ветки; tests/unit/test_promotion_in_merge.py, две мутации красные'
   status: adopted
   adopted_on: '2026-10-06'
-  change: 'git:e94e5a4'
+  change: 'git:1c218e9d'
   evidence:
   - git:8969010
-  - git:e94e5a4
+  - git:1c218e9d
   owner: владелец
 - id: C-71
   date: '2026-09-26'
@@ -2388,7 +2388,7 @@ lessons:
   subject: [concurrency, existing_home]
   outcome: {kind: check, text: 'кандидат: занятое имя без явного --resume — отказ с именем владельца нити из docs/handoff/INDEX.md'}
   status: observation
-  evidence: ['git:380b92d']
+  evidence: ['git:84056a2']
   owner: владелец
 - id: C-89
   date: '2026-09-29'
@@ -2427,7 +2427,7 @@ lessons:
   subject: [run_version]
   outcome: {kind: rule, text: 'перед постановкой в очередь нити, трогающей документы или правила публичной зоны, прогнать сторожей документов (test_public_doc_refs, test_doc_translations, test_doc_inventory) на объединении с остальными нитями очереди, а не только на её main'}
   status: observation
-  evidence: ['git:b3e51df', 'git:3586275']
+  evidence: ['git:b3e51df', 'git:a0af457']
   owner: владелец
 - id: C-92
   date: '2026-09-29'
@@ -2481,7 +2481,7 @@ lessons:
   subject: [test_stand]
   outcome: {kind: rule, text: 'в плане нити, выпускающей исполняемый артефакт (образ, службу, установщик), ворота этапа выпуска включают запуск самого артефакта на стенде и ночную проверку внутри него; тесты рендера — промежуточный сигнал'}
   status: observation
-  evidence: ['git:89e9268', 'git:1802d53']
+  evidence: ['git:5bcd8b7', 'git:88d6b02']
   owner: владелец
 - id: C-96
   date: '2026-09-29'
@@ -2496,7 +2496,7 @@ lessons:
   status: adopted
   adopted_on: '2026-10-18'
   change: 'ritual:letitbe, редакция 2026-10-15 (skills-mirror 1c93cdb) — 1.6 замер события — из его источника (устройство, облако поставщика, лог сервера) и строка «Запас» об утверждениях, родившихся по ходу; the-end full 2 — пометка таких утверждений; установлено 2026-10-18, установленная копия = skills-mirror по md5 (7 из 7 файлов); повтор 63ddc03, откатанного merge-коммитом ea3aa8b (C-179)'
-  evidence: ['git:1802d53']
+  evidence: ['git:88d6b02']
   owner: владелец
 - id: C-97
   date: '2026-09-29'
@@ -2509,7 +2509,7 @@ lessons:
   subject: [writers_readers, run_version]
   outcome: {kind: check, text: 'первая команда сессии в дереве нити — git status: непустой при снимке «писатель один» — стоп и выяснение автора до любого git add (внесено в How-to снимка 5943277)'}
   status: observation
-  evidence: ['git:ef368bf', 'docs/handoff/docker-install/inbox/docker-install-session-stage1.md']
+  evidence: ['git:4045937', 'docs/handoff/docker-install/inbox/docker-install-session-stage1.md']
   owner: владелец
 - id: C-98
   date: '2026-09-29'
@@ -2521,7 +2521,7 @@ lessons:
   subject: [measurement_path, hypothesis_before_fact]
   outcome: {kind: rule, text: 'сверка переноса базы — побайтово (sha256 файла) либо одной реализацией на обеих сторонах; дамп разных версий SQLite вторым источником не считается'}
   status: observation
-  evidence: ['git:1b02ca9']
+  evidence: ['git:1c56dca']
   owner: владелец
 - id: C-99
   date: '2026-09-29'
@@ -2535,7 +2535,7 @@ lessons:
   status: adopted
   adopted_on: '2026-10-18'
   change: 'ritual:the-end, редакция 2026-10-15 (skills-mirror 1c93cdb) — full 3(a): мутация на копии mktemp и откат копированием, не git checkout; установлено 2026-10-18, установленная копия = skills-mirror по md5 (7 из 7 файлов); повтор 63ddc03, откатанного merge-коммитом ea3aa8b (C-179)'
-  evidence: ['git:f5dcc9d']
+  evidence: ['git:a977470']
   owner: владелец
 - id: C-100
   date: '2026-09-29'
@@ -2548,9 +2548,9 @@ lessons:
   subject: [sensor_perimeter, test_stand]
   outcome: {kind: check, text: 'натив пересевает копию своим кодом (init_db) и сравниваются ещё и действующие правила тревог; стенд: без слоя — совпало, подменённое правило — 2 расхождения; test_diff_видит_тревогу_и_правило_только_с_одной_стороны'}
   status: adopted
-  change: 'git:dcc9b87'
+  change: 'git:1e33a40'
   adopted_on: '2026-09-29'
-  evidence: ['git:dcc9b87', 'contracts/pilot_shadow.json']
+  evidence: ['git:1e33a40', 'contracts/pilot_shadow.json']
   owner: владелец
 - id: C-101
   date: '2026-09-29'
@@ -2562,7 +2562,7 @@ lessons:
   subject: [hypothesis_before_fact, writers_readers]
   outcome: {kind: rule, text: 'в отчёте о найденном изменении данных последствие для читателя пишется только после трассировки читателя (кто читает таблицу в рантайме, есть ли резерв); иначе — «читатель не прослежен»'}
   status: observation
-  evidence: ['git:dcc9b87', 'plans/PLAN_docker_install_2026-09-29.md']
+  evidence: ['git:1e33a40', 'plans/PLAN_docker_install_2026-09-29.md']
   owner: владелец
 - id: C-102
   date: '2026-09-29'
@@ -3078,7 +3078,7 @@ lessons:
   subject: [test_stand, sensor_perimeter]
   outcome: {kind: rule, text: 'в стратегии тестирования плана: для каждого нового сигнала — тест, где подставлен только внешний мир (модель), а все свои слои от источника до получателя настоящие'}
   status: observation
-  evidence: ['git:7835b2b', 'git:c8d0149']
+  evidence: ['git:8068e1a7']
   owner: владелец
 - id: C-139
   date: '2026-10-02'
@@ -3106,7 +3106,7 @@ lessons:
   status: adopted
   adopted_on: '2026-10-15'
   change: 'CLAUDE.md §23 — абзац «Тот же класс без слов-маркеров»; перенесено из ритуала в дом проекта по лестнице носителя (skills-mirror 1c93cdb, CHANGELOG letitbe), нить ritual-lessons-park'
-  evidence: ['git:ad306f3']
+  evidence: ['git:3503bded']
   owner: владелец
 - id: C-141
   date: '2026-10-02'
@@ -3385,7 +3385,7 @@ lessons:
   status: adopted
   adopted_on: '2026-10-18'
   change: 'ritual:letitbe, редакция 2026-10-15 (skills-mirror 1c93cdb) — 1.6 замер события — из записи самого прибора или облака поставщика, не из конвейера, который мог его потерять; установлено 2026-10-18, установленная копия = skills-mirror по md5 (7 из 7 файлов); повтор 63ddc03, откатанного merge-коммитом ea3aa8b (C-179)'
-  evidence: ['git:427906c', 'git:7d63da7', 'docs/handoff/borrow-botkin/2026-10-06-b91eee4.md']
+  evidence: ['git:4aabe82', 'git:7d63da7', 'docs/handoff/borrow-botkin/2026-10-06-b91eee4.md']
   owner: владелец
 - id: C-161
   date: '2026-10-06'
@@ -3400,7 +3400,7 @@ lessons:
   status: adopted
   adopted_on: '2026-10-06'
   change: 'git:7d63da7'
-  evidence: ['git:7d63da7', 'git:1f9c8e6']
+  evidence: ['git:7d63da7', 'git:c032f68a']
   owner: владелец
 - id: C-162
   date: '2026-10-06'
@@ -3414,7 +3414,7 @@ lessons:
   outcome: {kind: check, text: 'повтор C-70 (пункт бэклога «по случаю» не подняли, когда случай наступил); починено тем же изменением — tests/unit/test_promotion_in_merge.py'}
   status: adopted
   adopted_on: '2026-10-06'
-  change: 'git:e94e5a4'
+  change: 'git:1c218e9d'
   evidence: ['git:a4f6386', 'git:b91eee4', 'BACKLOG.md']
   owner: владелец
 - id: C-163
@@ -3642,7 +3642,7 @@ lessons:
   status: adopted
   adopted_on: '2026-10-18'
   change: scripts/test_on_studio.sh
-  evidence: ['docs/handoff/uc-b09-own-input/2026-10-18-c43f4eb.md', 'git:82b6607', 'git:4a911bc']
+  evidence: ['docs/handoff/uc-b09-own-input/2026-10-18-c43f4eb.md', 'git:b17d94e1', 'git:4a911bc']
   owner: владелец
 - id: C-179
   date: '2026-10-18'
@@ -3750,4 +3750,25 @@ lessons:
   change: git:598c40d
   evidence:
   - docs/explanation/warn_delivery_rail.md
+  owner: владелец
+- id: C-184
+  date: '2026-10-31'
+  thread: reminders-tenant-account
+  event: 'Напоминание партнёра (задача 114) пришло владельцу на Mac: у партнёра не было своего caldav.json, и task_agent молча уходил в нативный путь AppleScript → Reminders.app, который пишет в iCloud-аккаунт МАШИНЫ, то есть владельца. В iCloud владельца нашёлся целый список «Health (partner)» из 13 задач. Та же точка у чужой Linux-установки без osascript давала сбой на каждой задаче (отчёт /bug 986fbe).'
+  cost: '13 задач партнёра в iCloud владельца, одна из них отмечена выполненной в чужом аккаунте (113) и не отличима от сделанной партнёром; 56 сбоев за неделю у чужой установки'
+  cause: 'изоляция тенантов задана через данные и секреты (secrets_dir, HEALTH_DATA_DIR), а нативный канал напоминаний привязан к третьему — учётной записи машины — и вопрос «чей это аккаунт» не задавался нигде; запасной путь выбирался по «умеет ли машина», а не по «чей канал». Датчик delivery_coverage заверяет только Telegram, Reminders вне его периметра'
+  address:
+    kind: runtime
+    ref: reminders_sync.py::native_allowed
+  subject:
+  - tenant
+  - sensor_perimeter
+  outcome:
+    kind: check
+    text: 'нативный путь допускается одним судьёй reminders_sync.native_allowed = is_owner() и есть osascript; тенант без своего канала получает notify.fault, а не iCloud оператора; оракул tests/unit/test_reminders_machine_account.py — мутация «убрать is_owner» даёт 3 failed из 20 (31.10). Не закрыто: реестр multitenancy.delivery_coverage о Reminders молчит — парк владельцу'
+  status: adopted
+  adopted_on: '2026-10-31'
+  change: git:3818181
+  evidence:
+  - docs/handoff/reminders-tenant-account/2026-10-31-c0e4737.md
   owner: владелец

@@ -115,8 +115,16 @@ def run(now: datetime | None = None) -> dict:
             os.fsync(out.fileno())
         os.replace(tmp, receipt)
         if via in PROVEN_CHANNELS:
+            # Показаны первые десять; остальные — только счётом. Их записи остаются в журнале до
+            # следующей сводки, а не стираются вместе с показанными: иначе строка «к сведению»,
+            # записанная один раз (safety_net._note_snapshot_absent), исчезала бы, оказавшись
+            # одиннадцатой (ревью ночного ремонта 01.11, report:5bf1da).
+            shown = set(lines[:10])
+            keep = [r for r in records if " ".join(r["text"].split())[:280] not in shown]
             journal.seek(0)
             journal.truncate()
+            for r in keep:
+                journal.write(json.dumps(r, ensure_ascii=False) + "\n")
             journal.flush()
             os.fsync(journal.fileno())
         else:

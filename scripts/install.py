@@ -12,7 +12,8 @@ methodology/), создаёт каталог данных и секретов, �
   * фоновые сервисы launchd не загружаются — это отдельный шаг человека (план, Э4).
 
 Снимки EFLM и CTCAE в репозиторий не входят (лицензии, NOTICE.md): без них пороги по этим
-документам не сеются, система работает и говорит об этом. Скачать — отдельными флагами.
+документам не сеются, система работает и говорит об этом. Скачать — отдельными флагами;
+EFLM по умолчанию не качается: условия справочника не разрешают этого явно (NOTICE.md, 31.10).
 """
 from __future__ import annotations
 
@@ -37,6 +38,11 @@ INSTALL_PROVENANCE = re.compile(r"<!-- install-provenance: (sha256:[0-9a-f]{12})
 # здесь один список для установочных страниц, не перечень всех секретов владельца.
 INSTALL_OPTIONAL_SECRETS = ("anthropic_key", "caldav.json", "deepseek_key", "gemini_key", "google_calendar_account",
                             "google_calendar_token.json", "openai_key", "oura_token")
+# Одна строка оператору, когда справочник EFLM не скачан (нить eflm-install-fetch, 31.10):
+# что выключено и как включить. В работе то же состояние не сбой — safety_net._note_eflm_absent.
+_EFLM_ABSENT_LINE = ("EFLM: справочник биологической вариации не скачан — сигналы о значимом изменении "
+                     "анализов между сдачами выключены, остальное работает. Включить: "
+                     "python3 scripts/install.py --apply --fetch-eflm (условия EFLM — NOTICE.md)")
 
 # шаблон → место в репо (.tmpl — подстановка {{КЛЮЧ}} значениями установки)
 FILES = [
@@ -710,7 +716,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--data-dir", default=os.environ.get("HEALTH_DATA_DIR", str(Path.home() / "health")))
     ap.add_argument("--secrets-dir", default=None,
                     help="каталог секретов (по умолчанию — secrets_paths.secrets_dir())")
-    ap.add_argument("--fetch-eflm", action="store_true", help="скачать снимок EFLM из их API (нужна сеть)")
+    ap.add_argument("--fetch-eflm", action="store_true",
+                    help="скачать снимок EFLM из их API (нужна сеть; по умолчанию не качается — условия EFLM, NOTICE.md)")
     ap.add_argument("--fetch-ctcae", action="store_true",
                     help="скачать таблицу CTCAE с сайта NCI и построить снимок порогов (нужна сеть)")
     ap.add_argument("--launchd", action="store_true",
@@ -817,8 +824,14 @@ def main(argv: list[str] | None = None) -> int:
         r = subprocess.run([sys.executable, "-c", "import norm_documents; print(norm_documents.fetch_eflm())"],
                            cwd=ROOT, env=env)
         if r.returncode:
-            print("EFLM: скачать не удалось — пороги лаб-трендов будут на резерве; "
+            print("EFLM: скачать не удалось — сигналы об изменении анализов между сдачами выключены; "
                   "повторите установку с --fetch-eflm, когда будет сеть")
+    elif not (ROOT / "data" / "norm_docs" / "eflm_bv.json").exists():
+        # По умолчанию не качаем (нить eflm-install-fetch, 31.10): условия EFLM разрешают личное
+        # скачивание выдержек, но запрещают хранить их «в электронной поисковой системе», про API
+        # молчат — решает оператор (NOTICE.md). Сказать один раз здесь; в работе — не сбой.
+        # Путь — тот же, что norm_documents.EFLM_SNAPSHOT; модуль здесь не импортируется (D3).
+        print(_EFLM_ABSENT_LINE)
     if a.fetch_ctcae:
         # Документ берётся у NCI на машине установки, в репозиторий не кладётся (коды MedDRA,
         # NOTICE.md; решение владельца 2026-09-25). Сеть упала — установка не падает: safety_net

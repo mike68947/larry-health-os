@@ -15,7 +15,8 @@ from __future__ import annotations
 from _time_inject import get_now  # seam
 
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
+import re
 from pathlib import Path
 
 import health_db as _db
@@ -195,6 +196,39 @@ def drift(conn: sqlite3.Connection) -> list[str]:
         if stored != live:
             diverged.append(key)
     return diverged
+
+
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def lagging(conn: sqlite3.Connection, today: date) -> list[str]:
+    """Ключи drift(), которые ремонтник ОБЯЗАН был уже свести: дата живого значения раньше
+    сегодняшней.
+
+    Ремонтник ходит раз в сутки, утром; замер, пришедший сегодня (весы после прогона), сводится
+    завтрашним прогоном — его расхождение сегодня штатное, и карточка «проверь джобу» на нём
+    ложная (ночной ремонт 2026-11-01: прогон 06:00, вес за 01.11 пришёл позже, drift=weight).
+    Вчерашний и более ранний замер прогон уже видел — расхождение по нему значит, что прогон
+    не состоялся или не записал, и ключ назван.
+
+    Судится по ДАТЕ ЖИВОГО ЗНАЧЕНИЯ (её несёт само значение — §18), а не по штампу updated_at:
+    штамп общий для всех ключей и ставится временем импорта модуля, а окно «свежести» прогона —
+    число из расписания, которое скрывало пропущенный прогон (ревью ночного ремонта, п. 1–4).
+    Цена: при пропущенном прогоне И сегодняшнем замере тревога придёт на сутки позже — когда
+    сегодняшний замер станет вчерашним. Значение без даты — судится всегда, как drift().
+    """
+    diverged = set(drift(conn))
+    out = []
+    for fn, _category in _RECONCILERS:
+        result = fn(conn)
+        if not result or result[0] not in diverged:
+            continue
+        key, live = result
+        dates = _ISO_DATE.findall(live)
+        if dates and max(dates) >= today.isoformat():
+            continue
+        out.append(key)
+    return out
 
 
 if __name__ == "__main__":

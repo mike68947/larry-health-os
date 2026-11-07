@@ -97,7 +97,12 @@ def _evidence_ok(root: Path, ref: str, git_ok: bool) -> bool | None:
             return False
         if not git_ok:
             return None
-        r = subprocess.run(["git", "-C", str(root), "cat-file", "-e", f"{sha}^{{commit}}"],
+        # Улика — коммит В ИСТОРИИ HEAD, а не просто объект в хранилище (31.10, карточка
+        # 2026-10-31-4a31191b): хеши нитей до ребейза (§21) живут в reflog и backup-ref'ах
+        # MacBook и судились там «есть», а на Studio gc их вычистил — тест краснел только там,
+        # то есть зелёный зависел от машины (§20). Предок HEAD одинаков на любой машине и
+        # краснеет ещё в дереве нити при закрытии, когда ребейз переписал хеши.
+        r = subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", sha, "HEAD"],
                            capture_output=True)
         return r.returncode == 0
     return (root / ref).exists()

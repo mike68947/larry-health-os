@@ -42,6 +42,11 @@ def _setup_dbs(tmp_path, monkeypatch, known_pgs_ids: list[str], genome_import_id
     HEALTH_PGS_DB через pgs_reference.get_ref_conn().
     """
     monkeypatch.setenv("HEALTH_PGS_DB", str(tmp_path / "pgs_ref.db"))
+    # Снимок reference-БД ложится в <DB_PATH>/../../backups — тест обязан писать в СВОЙ
+    # каталог: общий backups/ прогона делил файл снимка той же минуты между тестами, и
+    # chmod 600 зеленел, только если соседний тест успел создать файл (флак 30.10).
+    import health_db
+    monkeypatch.setattr(health_db, "DB_PATH", tmp_path / "data" / "health.db")
     ref = pgs_reference.get_ref_conn()
     for pid in known_pgs_ids:
         ref.execute(
@@ -237,11 +242,12 @@ def test_preopsnap_called_when_candidates_exist(tmp_path, monkeypatch):
         monkeypatch.setattr(pgsd.gw, "download_and_import",
                             MagicMock(return_value={"status": "ok", "n_inserted": 5}))
         monkeypatch.setattr(pgsd.pp, "run", MagicMock(return_value={"results": {}}))
-        with patch("sqlite3.connect", return_value=MagicMock()):  # snap_conn
-            result = pgsd.discover_and_import_new_scores(conn)
+        result = pgsd.discover_and_import_new_scores(conn)
 
     ref.backup.assert_called_once()       # снапшот reference создан
     assert result["snapshot_error"] is None
+    snaps = list((tmp_path / "backups").glob("pgs_reference.before_discovery_*.db"))
+    assert len(snaps) == 1 and (snaps[0].stat().st_mode & 0o777) == 0o600, snaps
 
 
 @pytest.mark.unit
@@ -260,8 +266,7 @@ def test_preopsnap_failure_does_not_block_import(tmp_path, monkeypatch):
         monkeypatch.setattr(pgsd.gw, "download_and_import",
                             MagicMock(return_value={"status": "ok", "n_inserted": 5}))
         monkeypatch.setattr(pgsd.pp, "run", MagicMock(return_value={"results": {}}))
-        with patch("sqlite3.connect", return_value=MagicMock()):
-            result = pgsd.discover_and_import_new_scores(conn)
+        result = pgsd.discover_and_import_new_scores(conn)
 
     assert len(result["imported"]) == 1
     assert result["imported"][0]["pgs_id"] == "PGS000888"

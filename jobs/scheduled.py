@@ -350,7 +350,12 @@ async def send_morning_report(context: ContextTypes.DEFAULT_TYPE):
         # всё чисто», а это разные вещи (§14: «датчик мёртв» ≠ «данные целы»).
         log.warning("BRIEF_NOT_GATED %s", _why)
 
-    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+    try:
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+    except TelegramError as e:
+        # Индикатор «печатает» — косметика. 28.10 он упал по таймауту Telegram и оборвал
+        # бриф целиком: дня нет ни в reports/, ни в context_cards, повтора не было.
+        log.warning("morning_report: индикатор «печатает» не ушёл (%s) — бриф продолжаю", e)
     await asyncio.to_thread(refresh_data)
 
     # Oura пишет сон на дату пробуждения = сегодня
@@ -385,9 +390,11 @@ async def send_morning_report(context: ContextTypes.DEFAULT_TYPE):
         # parse_mode=None: текст ошибки может содержать _/*/[] (напр.
         # _build_clinical_history) → Markdown-парс валит отправку и даже это
         # сообщение об ошибке тоже может не дойти.
+        import llm_client
+        _key, _kw = llm_client.fault_person_key(e, "jobs.morning.failed")
         await send_long(context.bot, chat_id,
                         await notify.afault(f"scheduled.send_morning_report: {type(e).__name__}: {e}",
-                            person_key="jobs.morning.failed"),
+                            person_key=_key, **_kw),
                         parse_mode=None)
         return
 

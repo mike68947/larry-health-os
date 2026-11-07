@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import bug_report as br
 import notify
 
-PLANTED = ("Мария Тестова-Выдуманная", "CA 19-9 = 37.2", "sk-ant-api03-FAKEFAKEFAKE0000",
+PLANTED = ("Мария Тестова-Выдуманная", "CA 19-9 = 37.2", "sk-ant-" + "api03-FAKEFAKEFAKE0000",  # склейка: сторож hardcoded_tokens судит текст файла
            "/Users/maria.test/Documents")
 
 
@@ -174,6 +174,28 @@ def test_no_fault_goes_to_a_worker_thread_the_old_way():
                     and (getattr(c.args[0], "attr", None) == "fault" or getattr(c.args[0], "id", None) == "fault")):
                 bad.append(f"{rel}:{c.lineno}")
     assert bad == [], f"to_thread(fault) вместо notify.afault: {bad}"
+
+
+def test_code_place_in_where_is_kept_not_other(tmp_path):
+    """Карточка report:eafa46: сбой без кадров с where «handlers/reports.py:cmd_report» (форму
+    строит сам fault) уходил в отчёт как «none в other» — и сливался со всеми такими сбоями.
+    Путь вне кода установки по-прежнему «other»."""
+    journal = tmp_path / "faults.jsonl"
+    now = datetime.now(timezone.utc).isoformat()
+    rows = [{"ts": now, "where": "handlers/reports.py:cmd_report"},
+            {"ts": now, "where": "jobs/scheduled.py:send_morning_report"},
+            {"ts": now, "where": "Users/maria.test/script.py:main"},
+            {"ts": now, "where": "../../etc/x.py:f"},
+            # обход с возвратом ВНУТРЬ кода: путь существует, но строка несёт имя с диска
+            {"ts": now, "where": "Users/maria/../../handlers/reports.py:cmd_report"},
+            {"ts": now, "where": "./handlers/reports.py:cmd_report"}]
+    journal.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    ats = sorted(g["at"][0] for g in br.faults_from_journal(journal))
+    assert ats == ["handlers/reports.py:cmd_report", "jobs/scheduled.py:send_morning_report", "other"], ats
+    rep = br.build("report_missing", report_id="0123456789abcdef:1", release="v0.2.4",
+                   platform="linux/aarch64", connected={}, faults=br.faults_from_journal(journal), screen=[])
+    assert br.schema_problems(rep) == []
+    assert "maria" not in json.dumps(rep)
 
 
 def test_run_checks_faults_name_their_step(tmp_path, monkeypatch):

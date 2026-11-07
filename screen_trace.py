@@ -26,6 +26,8 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from _time_inject import get_now
+
 KEEP_LINES = 200
 FREE = "free_text"
 
@@ -51,7 +53,7 @@ def note(sent_text: str) -> None:
         if found and not keys:
             return
         keys = keys or [FREE]
-        rec = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        rec = {"ts": get_now(timezone.utc).isoformat(timespec="seconds"),
                "tenant": _tenant(), "keys": keys[:5]}
         path = _path()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -73,7 +75,7 @@ def recent(limit: int = 20, days: int = 7) -> list[str]:
     """Последние строки следа своего тенанта: «ЧЧ:ММ ключ». Пусто при любом отказе чтения."""
     try:
         me = _tenant()
-        since = datetime.now(timezone.utc) - timedelta(days=days)
+        since = get_now(timezone.utc) - timedelta(days=days)
         out: deque = deque(maxlen=limit)
         for line in _path().read_text(encoding="utf-8").splitlines():
             rec = json.loads(line)

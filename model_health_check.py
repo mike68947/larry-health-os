@@ -56,7 +56,16 @@ def _ping(client, mid: str) -> tuple[bool, str | None]:
         import llm_client
         if isinstance(e, anthropic.NotFoundError) or llm_client.is_model_not_found(e):
             return False, "retired/not_found: " + str(e)[:140]
+        if llm_client.is_account_problem(e):
+            # Ключ или счёт у поставщика (карточка report:9198ad, v0.2.4) — о модели это не
+            # говорит НИЧЕГО: ни «недоступна», ни «доступна». Пометка ACCOUNT — run_check не пишет
+            # её в ремонт кода и не обновляет снимок доступности (иначе ложное переключение).
+            log.warning("model_health_check: %s — поставщик отказал по ключу/счёту, о модели не судим", mid)
+            return False, ACCOUNT + type(e).__name__
         return False, type(e).__name__ + ": " + str(e)[:140]
+
+
+ACCOUNT = "account: "   # деталь пинга, отбитого по ключу/счёту: доступность модели НЕ проверена
 
 
 def check_models(client=None) -> dict:
@@ -80,6 +89,7 @@ def check_models(client=None) -> dict:
         out[role] = {"model": active, "ok": ok, "detail": detail, "chain": chain,
                      "available": [m for m in chain if m in available]}
     out["_available"] = sorted(available)
+    out["_account"] = sorted(m for m, (_, d) in status.items() if str(d).startswith(ACCOUNT))
     return out
 
 
@@ -120,7 +130,22 @@ def run_check(notify: bool = False, client=None, persist: bool = False) -> dict:
     get_model и уведомление о самопереключении. Возвращает полный отчёт."""
     res = check_models(client=client)
     roles = {r: v for r, v in res.items() if not r.startswith("_")}
-    if persist:
+    account = res.get("_account") or []
+    if account:
+        # Поставщик отказал по ключу/счёту: доступность этих моделей сегодня не проверена.
+        # Снимок не трогаем (иначе переключение или «модель снова доступна» без основания),
+        # в ремонт кода не пишем (чинить там нечего), владельцу установки — одна карточка.
+        log.warning("model_health_check: проверка не состоялась по ключу/счёту: %s", account)
+        if notify:
+            try:
+                import i18n
+                import llm_client
+                import notify as notifications
+                notifications.notify_operator(i18n.t("owner.card.llm_account",
+                                                     provider=llm_client.provider_title()))
+            except Exception as e:
+                log.error("model_health_check: карточка о ключе не отправлена: %s", e)
+    if persist and not account:
         try:
             _persist_and_announce(res, notify)
         except Exception as e:
@@ -128,7 +153,8 @@ def run_check(notify: bool = False, client=None, persist: bool = False) -> dict:
             if notify:
                 import notify as notifications
                 notifications.fault("model_health_check: availability snapshot not written", person_key=None)
-    failed = {r: v for r, v in roles.items() if not v["ok"]}
+    failed = {r: v for r, v in roles.items()
+              if not v["ok"] and not str(v["detail"]).startswith(ACCOUNT)}
     if failed:
         lines = [f"• {r}: {v['model']} — {v['detail']}" for r, v in failed.items()]
         msg = ("🔴 Health OS: в цепочке роли не осталось доступной модели:\n" + "\n".join(lines))

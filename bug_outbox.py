@@ -22,6 +22,8 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from _time_inject import get_now
+
 # Адрес приёмника разработчика приезжает в образ выпуска (release.yml → HEALTH_BUG_RECEIVER из
 # переменной репозитория), а не литералом в коде: в нём имя сети Tailscale, а дерево судит перепись
 # личного (решение владельца 19.10 — адрес публичен в образе, в дереве его нет). Пусто — сборка не
@@ -98,12 +100,12 @@ def _outbox() -> Path:
 def _queue(report: dict) -> None:
     with _outbox().open("a", encoding="utf-8") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
-        f.write(json.dumps({"queued_at": datetime.now(timezone.utc).isoformat(), "report": report}) + "\n")
+        f.write(json.dumps({"queued_at": get_now(timezone.utc).isoformat(), "report": report}) + "\n")
 
 
 def drain(post=_post, now: datetime | None = None) -> dict:
     """Повторить очередь. → {'delivered': [номера], 'gave_up': N, 'left': N}. Зовёт cron раз в час."""
-    now = now or datetime.now(timezone.utc)
+    now = now or get_now(timezone.utc)
     out = {"delivered": [], "gave_up": 0, "left": 0}
     p = _outbox()
     if not p.exists() or not RECEIVER:
@@ -137,7 +139,7 @@ def stuck(now: datetime | None = None) -> int:
     """Сколько отчётов лежит в очереди дольше, чем позволяет drain (трое суток + два часовых
     захода). Больше нуля — повторщик в cron не работает: человеку обещано «отправлю сам», а
     отправлять некому. Читатель — integrity_tests.check_bug_outbox_drains."""
-    now = now or datetime.now(timezone.utc)
+    now = now or get_now(timezone.utc)
     try:
         lines = _outbox().read_text(encoding="utf-8").splitlines()
     except OSError:

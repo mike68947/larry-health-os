@@ -53,3 +53,26 @@ def test_form_check_survives_copy_without_git(tmp_path):
                 (tmp_path / ref).parent.mkdir(parents=True, exist_ok=True)
                 (tmp_path / ref).write_text("x")
     assert lessons.lesson_problems(tmp_path) == []
+
+
+def test_evidence_commit_must_be_in_history_not_just_in_store(tmp_path):
+    """31.10 (карточка 2026-10-31-4a31191b): хеш нити до ребейза лежит в хранилище (reflog,
+    backup-ref) на одной машине и вычищен gc на другой — «объект есть» давал зелёный от машины
+    (§20). Судим «коммит — предок HEAD»: побочная ветка с живым объектом — красная везде."""
+    import subprocess
+
+    def git(*a):
+        return subprocess.run(["git", "-C", str(tmp_path), *a], check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    git("init", "-q", "-b", "main")
+    git("-c", "user.name=t", "-c", "user.email=t@example.invalid",
+        "commit", "-q", "--allow-empty", "-m", "основа")
+    base = git("rev-parse", "HEAD")
+    git("checkout", "-q", "-b", "thread")
+    git("-c", "user.name=t", "-c", "user.email=t@example.invalid",
+        "commit", "-q", "--allow-empty", "-m", "коммит нити до ребейза")
+    side = git("rev-parse", "HEAD")
+    git("checkout", "-q", "main")
+    assert lessons._evidence_ok(tmp_path, f"git:{base[:7]}", True) is True
+    assert lessons._evidence_ok(tmp_path, f"git:{side[:7]}", True) is False   # объект есть, в истории нет

@@ -603,9 +603,7 @@ def _shown(f: Path) -> str:
 
 def _provider_name() -> str:
     import llm_client
-    p = llm_client.provider()
-    return {"anthropic": "Anthropic", "openai": "OpenAI", "gemini": "Gemini",
-            "deepseek": "DeepSeek"}.get(p, p)
+    return llm_client.provider_title()
 
 
 # Сайдкары отказов: каждый останавливает повторы навсегда (или до своего снятия). Повторная

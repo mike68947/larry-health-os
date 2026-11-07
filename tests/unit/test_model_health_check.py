@@ -59,6 +59,54 @@ def test_temporary_failure_only_journals(monkeypatch, fault_journal):
     assert sent == [] and "model request failed" in fault_journal.read_text()
 
 
+class _UsageLimit(Exception):
+    """Как anthropic.BadRequestError на лимите ключа (текст выдуман по форме ответа API)."""
+    status_code = 400
+
+    def __str__(self):
+        return "Error code: 400 - You have reached your specified API usage limits"
+
+
+class _ListedClient:
+    """Список моделей проходит (он бесплатный), пинг отбит по счёту — у алиаса, которого
+    в списке нет (claude-haiku-4-5), доступность решает именно пинг."""
+    def __init__(self, listed):
+        self.models = type("L", (), {"list": lambda _s, limit=100: [type("M", (), {"id": m})() for m in listed]})()
+        self.messages = type("C", (), {"create": lambda _s, **kw: (_ for _ in ()).throw(_UsageLimit())})()
+
+
+def test_account_refusal_is_not_model_fault_nor_availability(monkeypatch, fault_journal):
+    """Карточка report:9198ad (v0.2.4): «none в model_health_check.py:run_check». Пинг, отбитый
+    по ключу/счёту, ничего не говорит о модели: в ремонт кода не пишется, владельцу установки —
+    одна карточка про ключ, роль честно НЕ ok (код выхода CLI не врёт «всё хорошо»)."""
+    import notify
+    sent = []
+    monkeypatch.setattr(notify, "notify_operator", lambda text: sent.append(text))
+    alias = mh.hai_core.MODEL_DEFAULTS["haiku"]
+    listed = [m for m in mh.hai_core.MODEL_DEFAULTS.values() if m != alias]
+    r = mh.run_check(notify=True, client=_ListedClient(listed))
+    assert r["haiku"]["model"] == alias and not r["haiku"]["ok"], r
+    assert r["haiku"]["detail"].startswith(mh.ACCOUNT), r
+    assert not fault_journal.exists() or "model request failed" not in fault_journal.read_text()
+    import i18n, llm_client
+    assert sent == [i18n.t("owner.card.llm_account", provider=llm_client.provider_title())]
+
+
+def test_account_refusal_does_not_touch_the_snapshot(monkeypatch, fault_journal):
+    """Ревью 28.10: «доступна» по отказу счёта вело к записи снимка и «модель снова доступна»
+    с переключением с резервной на основную. Доступность не проверена — снимок не трогаем."""
+    import notify
+    monkeypatch.setattr(notify, "notify_operator", lambda text: None)
+    persisted = []
+    monkeypatch.setattr(mh, "_persist_and_announce", lambda res, n: persisted.append(res))
+    alias = mh.hai_core.MODEL_DEFAULTS["haiku"]
+    listed = [m for m in mh.hai_core.MODEL_DEFAULTS.values() if m != alias]
+    mh.run_check(notify=True, client=_ListedClient(listed), persist=True)
+    assert persisted == []
+    mh.run_check(notify=True, client=_Client(bad=set()), persist=True)   # контроль: без отказа пишет
+    assert len(persisted) == 1
+
+
 def test_unavailable_model_asks_for_choice(monkeypatch, fault_journal):
     import notify
     import i18n

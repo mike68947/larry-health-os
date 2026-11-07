@@ -1194,6 +1194,7 @@
     - secrets_paths.py::secrets_dir
     - health_db.py::_resolve_health_dir
     - integrity_tests.py::check_cross_tenant_contamination
+    - reminders_sync.py::native_allowed
   invariants:
     - id: tenant_secrets_fail_closed
       claim: "Данные принадлежат тенанту (HEALTH_DATA_DIR ≠ .../health), но HEALTH_SECRETS_DIR не задан → secrets_dir отказывает (fail-closed), а не отдаёт молча секреты владельца."
@@ -1282,6 +1283,24 @@
       warm_guard:
         absent: ["дайджест доставлен всем при любом состоянии соседа", "вердикт соседа не требуется"]
         absent_en: ["digest is delivered to everyone regardless of the neighbour", "neighbour's verdict is not required"]
+    - id: reminder_channel_belongs_to_person
+      claim: "Напоминание человека уходит только в его собственный канал (свой CalDAV-список, caldav.json в его секретах). Нативный путь Reminders.app пишет в учётную запись МАШИНЫ, а она принадлежит оператору установки, поэтому он допустим только оператору и только там, где есть osascript; решает это один судья reminders_sync.native_allowed для писателя и читателя. Тенант без своего канала получает громкий отказ (notify.fault), а не чужой аккаунт; оператор без канала — тихое «напоминания не подключены»."
+      # 2026-10-31 (нить reminders-tenant-account, решение владельца «дописать»): реестр
+      # заверял только Telegram (delivery_coverage_open), и канал, привязанный к третьему —
+      # учётной записи машины, — жил вне обещаний: задачи партнёра без своего caldav.json
+      # уходили в iCloud владельца (урок C-184). Негативный контроль исполнен 31.10: судья
+      # без is_owner() → 3 failed из 20 в тестах ниже.
+      status: holds
+      verified_at: "2026-10-31"
+      verified_on: "canon"
+      check:
+        file: tests/unit/test_reminders_machine_account.py
+        present: ["test_tenant_without_own_channel_never_writes_machine_account",
+                  "test_tenant_without_own_channel_never_reads_machine_account",
+                  "test_operator_on_linux_without_caldav_is_quiet"]
+      warm_guard:
+        absent: ["напоминания тенанта изолированы на любой машине", "нативный путь безопасен для всех"]
+        absent_en: ["tenant reminders are isolated on any machine", "the native path is safe for everyone"]
   sentinel: tests/consistency/test_intent_validation_gate.py
   last_reconciled: "2026-09-05"
 

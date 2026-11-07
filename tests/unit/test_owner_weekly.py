@@ -76,6 +76,27 @@ def test_ten_lines_and_queue_is_included(channel, monkeypatch):
     assert "исправлений в работе: 1" in channel[0] and "…и ещё 3" in channel[0]
 
 
+def test_lines_beyond_ten_wait_for_next_week(channel, owner_weekly_journal):
+    """Показанные десять стираются, не показанные — ждут следующей сводки (ревью ночного
+    ремонта 01.11, report:5bf1da): строка «к сведению», записанная один раз, не теряется,
+    оказавшись одиннадцатой."""
+    for n in range(12):
+        notify.weekly(f"Учебное событие {n}.")
+    weekly.run(monday())
+    left = [json.loads(x)["text"] for x in owner_weekly_journal.read_text().splitlines()]
+    assert left == ["Учебное событие 10.", "Учебное событие 11."]
+    weekly.run(monday().replace(day=14))
+    assert "Учебное событие 11." in channel[1]
+    assert owner_weekly_journal.read_text() == ""
+
+
+def test_weekly_receipt_says_whether_the_line_was_written(monkeypatch, owner_weekly_journal, fault_journal):
+    assert notify.weekly("Учебная строка.") is True
+    assert notify.weekly("   ") is False
+    monkeypatch.setattr(notify, "weekly_path", lambda: owner_weekly_journal.parent / "нет" / "\0")
+    assert notify.weekly("Учебная строка.") is False
+
+
 def test_queue_read_failure_is_visible(channel, monkeypatch, fault_journal):
     def broken(*args):
         raise OSError("fictional queue unavailable")
