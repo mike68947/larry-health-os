@@ -1,9 +1,12 @@
-"""Withings: авторизация и замеры давления — каждый со своим временем.
+"""Withings: авторизация, замеры давления (каждый со своим временем) и взвешивания (вес и состав тела).
 
 Зачем (нить withings-bp, 2026-10-04): давление тонометра Withings шло к нам только через
 Apple Health → Health Auto Export и с одной из летних дат перестало приходить — три месяца тишины никто не
 заметил. Прямой API Withings — второй источник, независимый от того пути: отдаёт каждый замер
 с временем и пульсом и позволяет сторожу увидеть «у Withings замер есть, у нас нет».
+
+Весы (2026-11-07): та же выдача user.metrics отдаёт взвешивания — вес и, что умеет модель, жир, мышцы,
+кость, воду, висцеральный жир, базовый обмен. Это единственный путь веса мимо «Здоровья» (HAE).
 
 Секреты: secrets/withings_client_id, secrets/withings_client_secret; первичная выдача —
 secrets/withings_oauth.json (только чтение), живой токен после ротации — data/withings_oauth.json.
@@ -36,6 +39,11 @@ REDIRECT_URI = "http://localhost:9877/withings/callback"
 SCOPE = "user.metrics"
 TOKEN_NAME = "withings_oauth.json"
 SYSTOLIC, DIASTOLIC, PULSE = 10, 9, 11          # коды мер Withings; сверить живым ответом (C-28)
+# Коды мер весов (документация Withings, 2026-11-07; как и 9/10/11 — сверить живым ответом при первом
+# импорте, C-28): вес кг, жир %, мышцы кг, кость кг, вода кг, висцеральный жир (индекс), базовый обмен ккал.
+WEIGHT, FAT_PCT, MUSCLE_KG, BONE_KG, HYDRATION_KG, VISCERAL_FAT, BMR_KCAL = 1, 6, 76, 88, 77, 170, 226
+BODY_COLUMNS = {FAT_PCT: "body_fat_pct", MUSCLE_KG: "muscle_mass_kg", BONE_KG: "bone_mass_kg",
+                VISCERAL_FAT: "visceral_fat", BMR_KCAL: "bmr_kcal"}   # → колонки daily_metrics (как у Fitdays)
 # attrib группы замеров (OpenAPI Withings): 1 — снят прибором, но может принадлежать другому
 # пользователю. Тонометр общий (живой случай 06.10: замер другого человека попал в давление владельца),
 # неотнесённый замер в давление владельца не идёт; отнесённый в приложении получает attrib 0.
@@ -141,30 +149,55 @@ def withings_access_token(data_dir: Path) -> str | None:
         return token["access_token"]
 
 
-def fetch_bp(access_token: str, lastupdate: int) -> list[dict]:
-    """Замеры давления, изменённые после lastupdate (unix): [{ts, systolic, diastolic, pulse, grpid}].
-    Группа без систолы или диастолы — не замер давления (весы шлют пульс отдельно)."""
-    out, offset = [], None
+def _groups(access_token: str, meastypes: str, lastupdate: int):
+    """Группы замеров getmeas (category 1 — реальные замеры), изменённые после lastupdate (unix):
+    (группа, {тип: значение}), значение = value * 10**unit. Группы attrib 1 (прибор общий, замер не
+    отнесён к владельцу) пропускаются. Листает more/offset; more=1 без нового offset — отказ, не цикл."""
+    offset = None
     while True:
-        fields = {"action": "getmeas", "meastypes": f"{SYSTOLIC},{DIASTOLIC},{PULSE}",
-                  "category": 1, "lastupdate": int(lastupdate)}
+        fields = {"action": "getmeas", "meastypes": meastypes, "category": 1, "lastupdate": int(lastupdate)}
         if offset is not None:
             fields["offset"] = offset
         body = _post(MEASURE_URL, fields, bearer=access_token)
         for grp in body.get("measuregrps") or []:
-            vals = {m["type"]: m["value"] * 10 ** m["unit"] for m in grp.get("measures") or []
-                    if isinstance(m, dict) and {"type", "value", "unit"} <= m.keys()}
             if grp.get("attrib") == AMBIGUOUS:   # прибор общий: замер, не отнесённый к владельцу, — не его
                 continue
-            if SYSTOLIC in vals and DIASTOLIC in vals:
-                out.append({"ts": int(grp["date"]), "systolic": vals[SYSTOLIC],
-                            "diastolic": vals[DIASTOLIC], "pulse": vals.get(PULSE),
-                            "grpid": grp.get("grpid")})
+            yield grp, {m["type"]: m["value"] * 10 ** m["unit"] for m in grp.get("measures") or []
+                        if isinstance(m, dict) and {"type", "value", "unit"} <= m.keys()}
         if not body.get("more"):
-            return out
+            return
         if body.get("offset") in (None, offset):
             raise WithingsError("Withings: more=1 без нового offset — страница повторилась бы бесконечно")
         offset = body.get("offset")
+
+
+def fetch_bp(access_token: str, lastupdate: int) -> list[dict]:
+    """Замеры давления, изменённые после lastupdate (unix): [{ts, systolic, diastolic, pulse, grpid}].
+    Группа без систолы или диастолы — не замер давления (весы шлют пульс отдельно)."""
+    out = []
+    for grp, vals in _groups(access_token, f"{SYSTOLIC},{DIASTOLIC},{PULSE}", lastupdate):
+        if SYSTOLIC in vals and DIASTOLIC in vals:
+            out.append({"ts": int(grp["date"]), "systolic": vals[SYSTOLIC],
+                        "diastolic": vals[DIASTOLIC], "pulse": vals.get(PULSE),
+                        "grpid": grp.get("grpid")})
+    return out
+
+
+def fetch_body(access_token: str, lastupdate: int) -> list[dict]:
+    """Взвешивания, изменённые после lastupdate (unix): [{ts, grpid, weight, body_water_pct и колонки
+    BODY_COLUMNS — те, что прибор дал}]. Группа без веса (тип 1) — не взвешивание. Воду Withings отдаёт
+    в кг, в базе — процент (как у Fitdays): вода / вес * 100."""
+    out = []
+    types = ",".join(str(t) for t in (WEIGHT, HYDRATION_KG, *BODY_COLUMNS))
+    for grp, vals in _groups(access_token, types, lastupdate):
+        if not vals.get(WEIGHT) or vals[WEIGHT] <= 0:
+            continue
+        row = {"ts": int(grp["date"]), "grpid": grp.get("grpid"), "weight": round(vals[WEIGHT], 2)}
+        row.update({col: round(vals[t], 2) for t, col in BODY_COLUMNS.items() if t in vals})
+        if HYDRATION_KG in vals:
+            row["body_water_pct"] = round(vals[HYDRATION_KG] / vals[WEIGHT] * 100, 1)
+        out.append(row)
+    return out
 
 
 def authorize(seed_path: Path) -> None:

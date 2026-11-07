@@ -124,9 +124,10 @@ def _ts(days_ago, hour=12):
     return int(t.timestamp()), t.date().isoformat()
 
 
-def _run(iw, monkeypatch, rows):
+def _run(iw, monkeypatch, rows, weighings=()):
     monkeypatch.setattr(iw, "withings_access_token", lambda d: "t")
     monkeypatch.setattr(iw, "fetch_bp", lambda tok, since: [dict(r) for r in rows])
+    monkeypatch.setattr(iw, "fetch_body", lambda tok, since: [dict(r) for r in weighings])
     return iw.run()
 
 
@@ -204,6 +205,80 @@ def test_import_without_withings_is_silent_zero(db, monkeypatch):
     import import_withings as iw
     monkeypatch.setattr(iw, "withings_access_token", lambda d: None)
     assert iw.run() == 0
+
+
+# ── весы: взвешивания → вес и состав тела дня (2026-11-07) ─────────────────────────────────
+
+def _wgrp(ts, kg, fat=None, muscle=None, water_kg=None, grpid=1, attrib=0):
+    m = [{"type": 1, "value": int(round(kg * 1000)), "unit": -3}]
+    for typ, v in ((6, fat), (76, muscle), (77, water_kg)):
+        if v is not None:
+            m.append({"type": typ, "value": int(round(v * 100)), "unit": -2})
+    return {"grpid": grpid, "date": ts, "measures": m, "attrib": attrib}
+
+
+def test_fetch_body_decodes_units_water_as_percent_and_skips_groups_without_weight(monkeypatch, secrets):
+    sent = _answers(monkeypatch, [{"status": 0, "body": {"more": 0, "measuregrps": [
+        _wgrp(1900000000, 80.0, fat=22.5, muscle=58.4, water_kg=44.0, grpid=1),
+        {"grpid": 2, "date": 1900000100, "measures": [{"type": 11, "value": 70, "unit": 0}]},  # пульс без веса
+        _wgrp(1900000200, 60.0, grpid=3, attrib=1)]}}])                                          # чужое взвешивание
+    assert wa.fetch_body("t", 0) == [{"ts": 1900000000, "grpid": 1, "weight": 80.0, "body_fat_pct": 22.5,
+                                      "muscle_mass_kg": 58.4, "body_water_pct": 55.0}]
+    form = sent[0].data.decode()
+    assert "action=getmeas" in form and "category=1" in form and "meastypes=1%2C77%2C6%2C76%2C88%2C170%2C226" in form
+
+
+def _w(ts, kg, fat=None, grpid=1):
+    row = {"ts": ts, "grpid": grpid, "weight": kg}
+    if fat is not None:
+        row["body_fat_pct"] = fat
+    return row
+
+
+def _body(date):
+    with _hdb().get_conn() as c:
+        r = c.execute("SELECT weight, body_fat_pct, raw FROM daily_metrics WHERE date=?", (date,)).fetchone()
+    return (r[0], r[1], json.loads(r[2] or "{}")) if r else None
+
+
+def test_body_day_is_morning_weighing_and_import_is_idempotent(db, monkeypatch):
+    import import_withings as iw
+    (t1, day), (t2, _) = _ts(3, 7), _ts(3, 21)
+    rows = [_w(t2, 81.2, 23.0, 2), _w(t1, 80.4, 22.5, 1)]           # вечернее пришло первым в ответе
+    assert _run(iw, monkeypatch, [], rows) == 0 and _run(iw, monkeypatch, [], rows) == 0
+    w, fat, raw = _body(day)
+    assert (w, fat, raw["body_source"]) == (80.4, 22.5, "withings")
+
+
+def test_own_body_day_mirrors_cloud_foreign_day_is_only_filled(db, monkeypatch):
+    import import_withings as iw
+    (t1, day1), (t2, day2) = _ts(6, 7), _ts(2, 7)
+    with _hdb().get_conn() as c:                                   # день2 первым записало «Здоровье»
+        c.execute("INSERT INTO daily_metrics(date, weight) VALUES (?, ?)", (day2, 79.0))
+    _run(iw, monkeypatch, [], [_w(t1, 80.4, 22.5, 1), _w(t2, 81.0, 24.0, 2)])
+    assert _body(day2)[:2] == (79.0, 24.0) and "body_source" not in _body(day2)[2]   # чужой вес цел, жир долит
+    _run(iw, monkeypatch, [], [_w(t1, 80.6, 22.0, 1)])             # своё исправлено в приложении, день2 удалён
+    assert _body(day1)[:2] == (80.6, 22.0)
+    assert _body(day2)[:2] == (79.0, 24.0)                         # чужой день зеркало не трогает
+
+
+def test_own_body_day_deleted_in_withings_is_cleared(db, monkeypatch):
+    import import_withings as iw
+    (t1, day1), (t2, day2) = _ts(6, 7), _ts(2, 7)
+    _run(iw, monkeypatch, [], [_w(t1, 80.4, 22.5, 1), _w(t2, 81.0, 24.0, 2)])
+    _run(iw, monkeypatch, [], [_w(t1, 80.4, 22.5, 1)])
+    w, fat, raw = _body(day2)
+    assert (w, fat) == (None, None) and "body_source" not in raw
+    assert _body(day1)[0] == 80.4
+
+
+def test_empty_weighings_with_own_days_refuse_instead_of_clearing(db, monkeypatch):
+    import import_withings as iw
+    t1, day1 = _ts(4, 7)
+    _run(iw, monkeypatch, [], [_w(t1, 80.4, grpid=1)])
+    with pytest.raises(wa.WithingsError, match="ноль взвешиваний"):
+        _run(iw, monkeypatch, [], [])
+    assert _body(day1)[0] == 80.4
 
 
 # ── сторож: дневное давление — среднее замеров Withings, второго писателя нет ──────────────

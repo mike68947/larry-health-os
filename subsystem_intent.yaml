@@ -2202,6 +2202,7 @@
     - dashboard_routers/api_hae_ingest.py::hae_ingest
     - integrity_tests.py::check_hae_arrivals_have_owner
     - integrity_tests.py::_hae_device_absent
+    - import_withings.py::_write_body_days
   invariants:
     - id: every_arrival_has_owner
       claim: "Судья на приёме (api_hae_ingest → hae_checker.judge_payload) выносит вердикт по ПОВЕДЕНИЮ разборщика, не по пометке реестра: ключи, которые реальный aggregate_metric_by_day выдаёт и которые доходят до хранения (APPLE_RAW_KEYS | APPLE_BIO_INPUTS), — handled; решение «не берём:» — tracked; разобрано, но не хранится, — unowned; незнакомое — new. Крик держит ночной датчик check_hae_arrivals_have_owner по СОСТОЯНИЮ реестра, а не по событию прихода (негативный контроль M1, покраснела 26.09)."
@@ -2257,6 +2258,18 @@
         - "День — по поясу установки (region_pack), не по месту замера: в поездке ночной замер может лечь соседним днём."
         - "У партнёра без Withings давление по-прежнему пишет «Здоровье» средним дня; удалённые в приборе замеры там не видны."
         - "Свидетель raw.apple_health_bp никем не судится: сверка «Здоровье» против Withings снята, потому что удаление замера в приборе — обычное действие человека и такая сверка кричала бы на каждое удаление."
+    - id: body_day_owner_withings
+      claim: "Вес и состав тела весов Withings идут вторым путём, мимо «Здоровья» и Health Auto Export: облако Withings → import_withings (fetch_body) → daily_metrics.weight/body_fat_pct/muscle_mass_kg/bone_mass_kg/body_water_pct/visceral_fat/bmr_kcal по утреннему (самому раннему) взвешиванию местного дня, как у import_fitdays. Хозяин колонок дня — кто первым записал вес (решение владельца 26.09): свой день (raw.body_source=withings) — зеркало облака, переписывается и чистится; чужой день («Здоровье», Fitdays) только доливается там, где пусто. Пустой ответ при непустых своих днях — отказ, не чистка (тесты test_own_body_day_* и test_empty_weighings_* в test_withings_bp)."
+      status: open
+      closes_when: "живой импорт взвешиваний в базу владельца совпал с приложением Withings по трём дням, и коды мер 1/6/76/77/88/170/226 подтверждены живым ответом"
+      closes_when_by: owner
+      check:
+        file: import_withings.py
+        present: ["def _write_body_days", "body_source"]
+      limits:
+        - "Коды мер весов взяты из документации Withings (2026-11-07), живым ответом настоящих весов ещё не подтверждены (урок C-28: 9/10/11 подтверждали так же)."
+        - "Ночного судьи у веса нет: check_bp_day_is_withings пересчитывает только давление; расхождение веса с облаком увидит только следующий импорт."
+        - "metrics_db.upsert_metrics_from_json пишет вес «Здоровья» безусловно: день, записанный Withings первым, поздний приём HAE за тот же день перепишет (те же весы — то же значение; не охраняется)."
   sentinel: tests/unit/test_hae_judge_payload.py
   last_reconciled: "2026-09-26"
 

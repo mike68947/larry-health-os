@@ -1,4 +1,4 @@
-<!-- translation-of: docs/how-to/README.md sha256:6a76fafbf951 -->
+<!-- translation-of: docs/how-to/README.md sha256:632206ad557b -->
 <!-- Machine translation by doc_agent --translate-intent; regenerated with the Russian page, do not edit by hand. -->
 
 **English** · [Русский](README.md)
@@ -51,7 +51,7 @@ A terminal on the machine where the system is installed is required. Use the rul
 - [Connect Google Calendar](connect_google_calendar.md)
 - [Connect Health OS to Claude and ChatGPT](connect_cloud_assistants.md)
 - [Correct memory and add a ban](edit_memory.md)
-- [Connect a Withings blood-pressure monitor](connect_withings.md) — section "Docker image install"
+- [Connect a Withings blood-pressure monitor and scale](connect_withings.md) — section "Docker image install"
 - Something went wrong (a fault with a code, a report did not arrive, the bot is silent): [report it to the developer](bot_fault.md)
 
 The other maintenance guides are still written for the author's original installation and do not
@@ -79,7 +79,7 @@ from the image need them.
   [seasonal table](reseed_seasonal_produce.md) · [trail list](refresh_trail_list.md)
 - Channels: [email](email_channel.md) · [weekly digest](weekly_digest.md) ·
   [log rotation](rotate_logs.md)
-- [Connect a Withings blood-pressure monitor](connect_withings.md) — a second blood-pressure source
+- [Connect a Withings blood-pressure monitor and scale](connect_withings.md) — a second blood-pressure source; weight and body composition bypassing Health
 - [Add a second person](add_person.md) ·
   [migrating from a native install to a container](pilot_switch.md)
 

@@ -12,6 +12,12 @@ Withings не подключён (нет выдачи токена) — тихи
 - дневные bp_systolic/bp_diastolic (среднее всех замеров дня — так требует домашний протокол 7-2-2)
   и пик дня raw bp_*_max (его читает потолок тревоги, решение 26.09) пишет отсюда Withings.
   Путь «Здоровья» эти ключи при непустом bp_readings не пишет (metrics_db.upsert_metrics_from_json).
+
+Весы Withings (2026-11-07): тем же токеном — вес и состав тела в daily_metrics по утреннему (самому
+раннему) взвешиванию местного дня, как у import_fitdays. Хозяин колонок дня — кто первым записал вес
+(решение владельца 26.09: два пути не спорят за одно значение): свой день (raw.body_source=withings)
+— зеркало облака, переписывается и чистится; чужой день («Здоровье», Fitdays) только доливается там,
+где пусто. Пустой ответ при непустых своих днях — отказ, не чистка.
 """
 import json
 import logging
@@ -23,11 +29,23 @@ from zoneinfo import ZoneInfo
 
 import health_db as db
 import region_pack
-from withings_api import WithingsError, fetch_bp, withings_access_token
+from withings_api import WithingsError, fetch_body, fetch_bp, withings_access_token
 
 log = logging.getLogger("import_withings")
 BP_SOURCE = "withings"      # метка в raw дня: день написан отсюда (по ней чистится день без замеров)
 _RAW_BP_KEYS = ("bp_systolic", "bp_diastolic", "bp_systolic_max", "bp_diastolic_max")
+BODY_SOURCE = "withings"    # метка в raw дня: вес и состав тела написаны отсюда
+_BODY_COLS = ("weight", "body_fat_pct", "muscle_mass_kg", "bone_mass_kg", "body_water_pct",
+              "visceral_fat", "bmr_kcal")
+
+
+def _raw(conn, date: str) -> dict:
+    row = conn.execute("SELECT raw FROM daily_metrics WHERE date=?", (date,)).fetchone()
+    try:
+        raw = json.loads(row[0]) if row and row[0] else {}
+    except json.JSONDecodeError:
+        raw = {}
+    return raw if isinstance(raw, dict) else {}
 
 
 def _mirror(conn, rows: list[dict]) -> int:
@@ -68,12 +86,7 @@ def _write_days(conn, days: dict) -> int:
             targets.add(date)
     for date in sorted(targets):
         conn.execute("INSERT OR IGNORE INTO daily_metrics(date) VALUES (?)", (date,))
-        row = conn.execute("SELECT raw FROM daily_metrics WHERE date=?", (date,)).fetchone()
-        try:
-            raw = json.loads(row[0]) if row and row[0] else {}
-        except json.JSONDecodeError:
-            raw = {}
-        raw = raw if isinstance(raw, dict) else {}
+        raw = _raw(conn, date)
         for k in _RAW_BP_KEYS:
             raw.pop(k, None)
         raw.pop("bp_source", None)
@@ -86,6 +99,41 @@ def _write_days(conn, days: dict) -> int:
     return len(targets)
 
 
+def _body_days(rows: list[dict], tz) -> dict:
+    """Дата (местная) → утреннее (самое раннее) взвешивание дня: один замер биоимпеданса на день,
+    вес и состав тела из одной строки — как у import_fitdays.aggregate_morning."""
+    days: dict = {}
+    for r in sorted(rows, key=lambda r: r["ts"]):
+        days.setdefault(datetime.fromtimestamp(r["ts"], tz).date().isoformat(), r)
+    return days
+
+
+def _write_body_days(conn, days: dict) -> int:
+    """Вес и состав тела из взвешиваний. Свой день (raw.body_source=withings или вес пуст) — зеркало
+    облака: переписывается, без взвешивания чистится. Чужой день — только доливка пустых колонок."""
+    mine = {d for d, raw in conn.execute("SELECT date, raw FROM daily_metrics")
+            if f'"body_source": "{BODY_SOURCE}"' in (raw or "")}
+    if not days and mine:
+        raise WithingsError(f"Withings вернул ноль взвешиваний при {len(mine)} днях веса в базе — "
+                            "чистить не стану; проверьте, тот ли аккаунт подключён")
+    targets = mine | set(days)
+    for date in sorted(targets):
+        conn.execute("INSERT OR IGNORE INTO daily_metrics(date) VALUES (?)", (date,))
+        raw = _raw(conn, date)
+        raw.pop("body_source", None)
+        rec = {c: v for c, v in (days.get(date) or {}).items() if c in _BODY_COLS}
+        weight_before = conn.execute("SELECT weight FROM daily_metrics WHERE date=?", (date,)).fetchone()[0]
+        if date in mine or weight_before is None:
+            if rec:
+                raw["body_source"] = BODY_SOURCE
+            sets, params = [f"{c}=?" for c in _BODY_COLS], [rec.get(c) for c in _BODY_COLS]
+        else:                                    # чужой день: доливаем только пустое
+            sets, params = [f"{c}=COALESCE({c}, ?)" for c in rec], list(rec.values())
+        conn.execute(f"UPDATE daily_metrics SET {', '.join(sets)}, raw=? WHERE date=?",
+                     (*params, json.dumps(raw, ensure_ascii=False), date))
+    return len(targets)
+
+
 def run() -> int:
     db.init_db()
     data_dir = Path(db.DB_PATH).parent
@@ -94,12 +142,14 @@ def run() -> int:
         print("Withings не подключён — пропуск")
         return 0
     rows = fetch_bp(token, 0)                 # вся история: только так видно удалённое в приложении
+    weighings = fetch_body(token, 0)
     tz = ZoneInfo(region_pack.value("timezone", "UTC"))
-    with db.get_conn() as conn:
+    with db.get_conn() as conn:               # давление и вес — одной транзакцией
         gone = _mirror(conn, rows)
         touched = _write_days(conn, _days(conn, tz))
+        body_days = _write_body_days(conn, _body_days(weighings, tz))
     print(f"Withings: замеров давления {len(rows)}, удалено как удалённых в Withings {gone}, "
-          f"дней давления пересчитано {touched}")
+          f"дней давления пересчитано {touched}; взвешиваний {len(weighings)}, дней веса пересчитано {body_days}")
     return 0
 
 

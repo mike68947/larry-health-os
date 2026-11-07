@@ -1,7 +1,7 @@
-<!-- translation-of: docs/how-to/connect_withings.md sha256:55a53d76b3b7 -->
+<!-- translation-of: docs/how-to/connect_withings.md sha256:9777d7668f50 -->
 **English** · [Русский](connect_withings.md)
 
-# How to connect a Withings blood-pressure monitor
+# How to connect a Withings blood-pressure monitor and scale
 
 > **Document type:** How-to (Diátaxis). Steps 1–4 are for the **author's original setup** (a repository
 > clone, Python 3.11 on the machine). For the **Docker image install**, step 1 is the same and steps 2–4
@@ -13,7 +13,10 @@ its own time and pulse. It lands in the `bp_readings` table, and a nightly check
 what arrived through Health.
 
 The connection lets the system only **read measurements** (`user.metrics`): blood pressure, pulse,
-weight. The system cannot write anything to Withings.
+weight. The system cannot write anything to Withings. A Withings scale comes through the same
+connection: weight and body composition (fat, muscle, bone, water, visceral fat, basal metabolic rate
+— whatever the model measures); since 07.11.2026 they land in `daily_metrics` by the morning weighing
+of the day, bypassing Health and Health Auto Export. No separate phone app is needed for the scale.
 
 You need: a Withings account that shows your monitor's readings; a browser where you can sign in
 to that account; a terminal on the computer **with that same browser**.
@@ -101,11 +104,18 @@ cd ~/health_scripts && python3.11 import_withings.py
 ```
 
 Expected: `Withings: замеров давления N, удалено как удалённых в Withings 0, дней давления
-пересчитано M` ("N readings, 0 removed as deleted in Withings, M pressure days recomputed"), exit
-code 0. Every run fetches the whole Withings history and makes the database its mirror: a reading
-you delete in the app as a failed one is deleted here too. Once Withings is connected, it writes the
-daily pressure (the mean of all readings of the day) instead of Health; days before the first Withings
-reading stay as they were. After that the import runs on schedule twice a day, at 09:10 and 21:10.
+пересчитано M; взвешиваний K, дней веса пересчитано L` ("N readings, 0 removed as deleted in Withings,
+M pressure days recomputed; K weighings, L weight days recomputed"), exit code 0. Every run fetches the
+whole Withings history and makes the database its mirror: a reading you delete in the app as a failed
+one is deleted here too. Once Withings is connected, it writes the daily pressure (the mean of all
+readings of the day) instead of Health; days before the first Withings reading stay as they were. The
+day's weight and body composition are the morning (earliest) weighing; a day that already has a weight
+from another source (Health, Fitdays) is not overwritten, only its empty columns are filled. After that
+the import runs on schedule twice a day, at 09:10 and 21:10.
+
+**Scale (07.11.2026):** the Withings measure codes for weight and body composition (1, 6, 76, 77, 88,
+170, 226) come from the Withings documentation and have not yet been confirmed by a live response from
+a real scale — after the first import, compare one day's weight with the Withings app.
 
 Compare one reading with the Withings app: the database stores time in UTC, the app shows local time.
 

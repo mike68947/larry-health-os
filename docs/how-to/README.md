@@ -48,7 +48,7 @@
 - [Подключить Google Calendar](connect_google_calendar.md)
 - [Подключить Health OS к Claude и ChatGPT](connect_cloud_assistants.md)
 - [Поправить память и добавить запрет](edit_memory.md)
-- [Подключить тонометр Withings](connect_withings.md) — раздел «Установка из образа Докера»
+- [Подключить тонометр и весы Withings](connect_withings.md) — раздел «Установка из образа Докера»
 - Что-то пошло не так (сбой с кодом, не пришёл отчёт, бот молчит): [сообщить разработчику](bot_fault.md)
 
 Остальные инструкции обслуживания пока написаны для исходной установки автора и в установке из
@@ -75,7 +75,7 @@
   [сезонная таблица](reseed_seasonal_produce.md) · [список троп](refresh_trail_list.md)
 - Каналы: [почта](email_channel.md) · [еженедельный дайджест](weekly_digest.md) ·
   [ротация журналов](rotate_logs.md)
-- [Подключить тонометр Withings](connect_withings.md) — второй источник давления
+- [Подключить тонометр и весы Withings](connect_withings.md) — второй источник давления; вес и состав тела мимо «Здоровья»
 - [Добавить второго человека](add_person.md) ·
   [перевод из нативной установки в контейнер](pilot_switch.md)
 
