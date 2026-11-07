@@ -1,5 +1,6 @@
-<!-- translation-of: docs/explanation/device_metrics_owner.md sha256:4b5978d52870 -->
+<!-- translation-of: docs/explanation/device_metrics_owner.md sha256:bd8b9bd3e457 -->
 <!-- Machine translation by doc_agent --translate-intent; regenerated with the Russian page, do not edit by hand. -->
+<!-- 2026-11-07: the scale paragraphs were translated by hand together with the Russian page; the next --translate-intent replaces them. -->
 
 **English** · [Русский](device_metrics_owner.md)
 
@@ -7,13 +8,11 @@
 
 ## What changed
 
-- **`bp_day_owner_withings`: status changed from `open` to `holds`.** The invariant that when Withings is connected it becomes the sole owner of daily blood pressure is now considered satisfied — not open.
+- **New invariant `body_day_owner_withings`, status `open`.** Weight and body composition from a Withings scale got a second path — straight from the Withings cloud, bypassing Health and Health Auto Export. The invariant states who owns the day's weight columns and how the path behaves when a weighing is deleted or the answer is empty. The status is open: no live import from a real scale has run yet, and the measure codes come from the documentation.
 
-- **The boundary of what is proven for `bp_day_owner_withings` is fixed.** Confirmation was received on 07.10 in read-only mode (Studio container): three days from the previous confirmation hold measurement averages and `bp_source=withings`; after deploy, 7 Health files arrived (the last one on 07.10 at 08:42) — the days were not rewritten; an independent recalculation of averages by local day produced 0 days of discrepancy and 0 values without measurements; the nightly integrity artifact of 07.10 did not contain `check_bp_day_is_withings` among failures or warnings; `import_withings` runs at 09:10 and 21:10 — error log is empty. This is "holds within the stated limits", not "verified under all possible conditions".
+- **The blood-pressure records did not change:** `bp_day_owner_withings` still `holds`, confirmed 2026-10-07.
 
-- **Confirmation run date: 2026-10-07.** Silence in this field would mean "not confirmed" — the date is now recorded.
-
-**Updated:** 2026-10-07
+**Updated:** 2026-11-07
 
 
 ## Why it exists
@@ -42,6 +41,8 @@ One more rule concerns empty columns. If a column is empty — that can mean "no
 
 Blood pressure is a special case. It has two independent paths. The first is through the device and the standard parser. The second is directly from the Withings cloud: each measurement with time of day and pulse. When Withings is connected, it becomes the sole owner of daily blood pressure in the final digest. The daily value is the average of all measurements over the local day, and the peak value used for alert assessment is the maximum among them. The Health path in this case does not write to those columns; instead it stores its data as a separate witness. If a measurement is deleted in the Withings app — on the next sync it disappears from the database as well. An empty response from Withings when history is non-empty is not interpreted as "no measurements" — it is treated as a failure, and data is not erased.
 
+Weight is a similar but more modest case. A Withings scale sends its weighings to the same cloud, and through the same connection the system takes weight and body composition (fat, muscle, bone, water, visceral fat, basal metabolic rate — whatever the scale model measures). A day gets its morning, earliest weighing — the same rule as for the Fitdays scale. The owner of the day's columns is whoever wrote the weight first: a day Withings owns is kept as a mirror of the cloud (a correction in the app is written over, a deletion clears it), while a day whose weight already came from Health or Fitdays is left alone — only its empty columns are filled. An empty answer while own days exist is a failure, not a clearing.
+
 The nightly sensor checks all of this not on the event of data arrival, but against the state of the registry. This matters: the sensor does not wait for a new file to notice a problem — it looks at what is already there and compares it with what should be there.
 
 ## What to honestly say about its limits
@@ -64,6 +65,8 @@ For a partner without Withings, blood pressure is still calculated differently, 
 
 Health data for blood pressure sits as a separate witness and is not automatically cross-checked against Withings by anything. This is intentional: deleting a measurement on the device is a normal human action, and automatic cross-checking would raise an alarm on every such deletion.
 
+**Weight and body composition from a Withings scale** — the path was added on 07.11.2026 and has not yet been confirmed by a live import: the invariant is open. The scale measure codes come from the Withings documentation, not from a live answer — for blood pressure such codes were confirmed by a live answer at the time, and that is still to be done here. There is no nightly judge for weight: the sensor recomputes blood pressure only, so a weight diverging from the cloud is seen only by the next import. And the Health path writes weight unconditionally: a later Health payload for a day Withings wrote first overwrites it — the same scale gives the same value, but no rule guards this.
+
 ## Where this lives in the system
 
-The judge's logic lives in **hae_checker.py** — there are the verdicts for each metric, data-coverage verification, registry-blindness control, and tests for distinguishing loss from silence. The intentions of the subsystem — why it exists and what exactly counts as a loss — are described in **subsystem_intent.yaml**.
+The judge's logic lives in **hae_checker.py** — there are the verdicts for each metric, data-coverage verification, registry-blindness control, and tests for distinguishing loss from silence. The second path for blood pressure and weight from the Withings cloud is in **import_withings.py**. The intentions of the subsystem — why it exists and what exactly counts as a loss — are described in **subsystem_intent.yaml**.
