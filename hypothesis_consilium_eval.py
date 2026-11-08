@@ -121,8 +121,36 @@ _ARBITER_EXTRACT_PROMPT = """
 
 # ── Data package для оценки ──────────────────────────────────────────────────
 
+def _treatment_lines() -> list[str]:
+    """Блок лечения и добавок для пакета оценки (2026-11-07). Консилиум 01.11 выдвинул
+    «непроговорённые добавки», не видя medications. Только подтверждённые/ручные записи
+    (гейт treatment_db.get_medications); текущие — с дозой и частотой, законченные — с датами:
+    гипотеза о сдвиге анализа смотрит на то, что принималось в момент забора."""
+    meds = db.get_medications()
+    active = [m for m in meds if (m.get("status") or "active") == "active"]
+    ended = [m for m in meds if m not in active]
+
+    def _one(m: dict, with_dates: bool) -> str:
+        parts = [m["name"]] + [x for x in (m.get("dosage"), m.get("frequency")) if x]
+        if with_dates:
+            parts.append(f"{m.get('start_date') or '?'} → {m.get('end_date') or '?'}")
+        elif m.get("start_date"):
+            parts.append(f"с {m['start_date']}")
+        if m.get("notes"):
+            parts.append(f"({m['notes']})")
+        return "  • " + " — ".join(parts)
+
+    if not meds:
+        return ["", "ЛЕЧЕНИЕ И ДОБАВКИ: подтверждённых записей нет (это «не записано», а не «не принимает»)."]
+    out = ["", f"ЛЕЧЕНИЕ И ДОБАВКИ (подтверждённые записи: {len(active)} текущих, {len(ended)} законченных):"]
+    out += [_one(m, False) for m in active]
+    if ended:
+        out += ["  законченные:"] + [_one(m, True) for m in ended]
+    return out
+
+
 def _build_eval_data_package(hypothesis: dict) -> str:
-    """Строит data package: гипотеза + полная история лабных данных."""
+    """Строит data package: гипотеза + полная история лабных данных + лечение и добавки."""
     db.init_db()
 
     obs     = hypothesis.get("observation", "")
@@ -172,6 +200,8 @@ def _build_eval_data_package(hypothesis: dict) -> str:
         labs_db.declared_boundary(730, unjudged=True),
         "",
         *([codraw, ""] if codraw else []),
+        *_treatment_lines(),
+        "",
         "═══════════════════════════════════════",
         "ЗАДАЧА КОНСИЛИУМА:",
         f"Оцените, подтвердилась ли гипотеза. Предсказание: «{pred}».",

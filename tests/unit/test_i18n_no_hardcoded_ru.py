@@ -873,6 +873,12 @@ ALLOWED_RU.update({
             'ec7ba76151e6db5395948eeda7db6ecd0197aa8ef55dc46852236cfbb0c04209': 'OWNER_OPS: _tg_notify console progress, not tenant notification',
         },
         'hypothesis_consilium_eval.py': {
+            '6d1885780c3903f26ab755bfbd8eaa855565d831fdd49fb45a4395c5f1a4fad8': 'MODEL: _treatment_lines prompt/context; outside K8 PERSON occurrences',
+            '0f1e24dcc1aa4b1f3b5eed8bffda8b0dba3a2bd87c80b09a971224e2431e1fad': 'MODEL: _treatment_lines prompt/context; outside K8 PERSON occurrences',
+            'ddfe3ff85003178ab148ea94bd1dffd16f711b40bf749137b50ace4ee58d2c21': 'MODEL: _treatment_lines prompt/context; outside K8 PERSON occurrences',
+            'e4508742ac983aefff0482af2086ace4676fb53fb7ed7f681572a0092808c179': 'MODEL: _treatment_lines prompt/context; outside K8 PERSON occurrences',
+            'e37d6692380f949ada87c0d86e12b89115a3fa4db99349c9dcf39549afae7a74': 'MODEL: _treatment_lines prompt/context; outside K8 PERSON occurrences',
+            '2fdf3512d44088619c6f7a34a6df07cfa4962fef53c72df732d1dd1177ed37e1': 'MODEL: _treatment_lines prompt/context; outside K8 PERSON occurrences',
             '6d76d85260eb718fb71b9dafac333751d911f2a07ce17c7cd062ddacf4d4ad67': 'INTERNAL: module description after an import (not an AST docstring)',
             '6dab3a166922ccd99bbe75cef461b4eff2d631e9c27775367507a88d64a5bff0': 'MODEL: <module> prompt/context; outside K8 PERSON occurrences',
             'd9e663e443b4b5fb78d9d0b4527a841c3d3fb1553571c204cc92a1cdd5d9fd34': 'MODEL: <module> prompt/context; outside K8 PERSON occurrences',
