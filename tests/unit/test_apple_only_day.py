@@ -63,3 +63,6 @@ def test_day_file_follows_the_latest_apple_arrival_unless_the_ring_wrote_it(db, 
     ia.save_daily_summaries({"2030-03-09": {"hrv": {"avg": 50}, "steps": 300}}, mode="merge")
     doc = json.loads((tmp_path / "2030-03-09.json").read_text())
     assert doc["hrv"] == {"avg": 22} and doc["steps"] == 300                    # кольцо — хозяин своих ключей
+    (tmp_path / "2030-03-10.json").write_text(json.dumps({"hrv": {"avg": 22, "source": "Oura"}}))
+    ia.save_daily_summaries({"2030-03-10": {"hrv": {"avg": 50}}}, mode="merge")
+    assert json.loads((tmp_path / "2030-03-10.json").read_text())["hrv"]["avg"] == 22   # блок с подписью кольца

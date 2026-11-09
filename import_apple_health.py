@@ -410,6 +410,7 @@ def save_daily_summaries(daily, mode="merge"):
     for ds, summary in sorted(daily.items()):
         if not summary:
             continue
+        incoming_summary = dict(summary)
         out_path = HEALTH_DATA / f"{ds}.json"
         if mode == "merge" and out_path.exists():
             with open(out_path) as f:
@@ -424,12 +425,18 @@ def save_daily_summaries(daily, mode="merge"):
                 "resilience", "readiness_score", "hrv_balance",
                 "body_temperature", "recovery_index", "breathing_disturbance",
             }
-            # Только если в файле действительно есть данные кольца (09.11.2026): без Oura эти ключи
-            # в файле — наши же, с прошлого прихода, и новый приход обязан их обновить.
-            from metrics_db import has_oura_data
-            if has_oura_data(existing):
-                for k in _OURA_OWNED:
-                    if k in existing and existing[k] is not None:
+            # Свой блок с прошлого прихода обновляем (09.11.2026): Oura подписывает каждый свой блок
+            # source="Oura", наш — словарь без этой подписи. Сон — в любом файле, ВСР/пульс/SpO2 —
+            # только в файле без данных кольца. Голое число без подписи — не наше, не трогаем.
+            from health_db import has_oura_data
+            ring_file = has_oura_data(existing)
+            for k in _OURA_OWNED:
+                if k in existing and existing[k] is not None:
+                    block = existing[k]
+                    apple_block = ((k == "sleep" or not ring_file) and isinstance(block, dict)
+                                   and block.get("source") != "Oura"
+                                   and "contributors" not in block)
+                    if not apple_block:
                         filtered.pop(k, None)
             existing.update(filtered)
             summary = existing
@@ -446,7 +453,7 @@ def save_daily_summaries(daily, mode="merge"):
         # W5K-B3: также пишем в SQLite с source='AppleHealth' — без ожидания migrate_all_json
         try:
             from health_db import upsert_metrics_from_json as _upsert
-            _upsert(ds, summary, source="AppleHealth")
+            _upsert(ds, incoming_summary, source="AppleHealth")
         except Exception as e:
             log.warning(f"  sqlite upsert {ds}: {e}")
 
