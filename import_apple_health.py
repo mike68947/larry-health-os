@@ -90,11 +90,16 @@ _BODYCOMP_MORNING = {
 }
 
 
-def aggregate_metric_by_day(metric_name, entries, daily):
+def aggregate_metric_by_day(metric_name, entries, daily, units=None):
     """
     Aggregate metric entries into daily buckets.
     daily: dict[date_str → dict]
+    units: единица метрики из выгрузки. Энергия приходит в кДж, если так настроен телефон
+    (живой случай 09.11.2026: 1570 «ккал» активности за день оказались 1570 кДж ≈ 375 ккал) —
+    в ключи *_kcal кладём килокалории.
+    ponytail: переводится только энергия; мили и фунты не переводятся — добавить, когда придут.
     """
+    to_kcal = 1 / 4.184 if str(units or "").strip().lower() == "kj" else 1.0
     for entry in entries:
         d = parse_hae_date(entry.get("date"))
         if not d:
@@ -189,11 +194,11 @@ def aggregate_metric_by_day(metric_name, entries, daily):
             bucket["distance_km"] = round(bucket.get("distance_km", 0) + qty, 3)
 
         elif metric_name == "active_energy":
-            qty = entry.get("qty", 0) or 0
+            qty = (entry.get("qty", 0) or 0) * to_kcal
             bucket["active_kcal"] = round(bucket.get("active_kcal", 0) + qty, 1)
 
         elif metric_name == "basal_energy_burned":
-            qty = entry.get("qty", 0) or 0
+            qty = (entry.get("qty", 0) or 0) * to_kcal
             bucket["basal_kcal"] = round(bucket.get("basal_kcal", 0) + qty, 1)
 
         elif metric_name == "vo2_max":
@@ -374,7 +379,7 @@ def process_hae_json(filepath):
     for metric in metrics:
         name = metric.get("name", "")
         entries = metric.get("data", [])
-        aggregate_metric_by_day(name, entries, daily)
+        aggregate_metric_by_day(name, entries, daily, units=metric.get("units"))
 
     # clean up helper sample arrays from output
     _sample_keys = [
@@ -419,9 +424,13 @@ def save_daily_summaries(daily, mode="merge"):
                 "resilience", "readiness_score", "hrv_balance",
                 "body_temperature", "recovery_index", "breathing_disturbance",
             }
-            for k in _OURA_OWNED:
-                if k in existing and existing[k] is not None:
-                    filtered.pop(k, None)
+            # Только если в файле действительно есть данные кольца (09.11.2026): без Oura эти ключи
+            # в файле — наши же, с прошлого прихода, и новый приход обязан их обновить.
+            from metrics_db import has_oura_data
+            if has_oura_data(existing):
+                for k in _OURA_OWNED:
+                    if k in existing and existing[k] is not None:
+                        filtered.pop(k, None)
             existing.update(filtered)
             summary = existing
         # Атомарная запись: temp в той же директории (same filesystem)

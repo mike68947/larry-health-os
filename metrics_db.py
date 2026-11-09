@@ -251,6 +251,22 @@ APPLE_RAW_KEYS = frozenset({
 APPLE_FILL_ONLY = frozenset({"body_fat_pct", "bmi"})
 APPLE_BIO_INPUTS = frozenset({"hrv", "resting_heart_rate", "sleep", "spo2", "respiratory_rate"})
 _APPLE_BP_KEYS = ("bp_systolic", "bp_diastolic", "bp_systolic_max", "bp_diastolic_max")
+# Колонки активности: хозяин — Oura (W5K), а в день без данных Oura — «Здоровье» (09.11.2026).
+_APPLE_ACTIVITY_COLS = ("steps", "active_kcal", "total_kcal", "distance_km")
+# Ключи дневного JSON, которые умеет дать только Oura. Имена hrv/sleep/spo2/steps у источников общие
+# и сами ничего не доказывают.
+_OURA_ONLY_KEYS = frozenset({"readiness_score", "hrv_balance", "body_temperature", "recovery_index",
+                             "resting_hr_contrib", "activity_score", "stress", "resilience",
+                             "breathing_disturbance"})
+
+
+def has_oura_data(doc: dict | None) -> bool:
+    """Есть ли в дневном JSON (data/daily_metrics/<день>.json) данные Oura. Файл дня общий у двух
+    импортёров, и до 09.11.2026 migrate_all_json записывал любой файл как Oura: у человека с Apple
+    Watch без кольца день становился «днём Oura», и следующие приходы «Здоровья» в нём молчали."""
+    doc = doc or {}
+    sleep = doc.get("sleep")
+    return bool(_OURA_ONLY_KEYS & doc.keys()) or (isinstance(sleep, dict) and sleep.get("source") == "Oura")
 
 
 def _bp_owned_by_withings(conn) -> bool:
@@ -270,8 +286,10 @@ def upsert_metrics_from_json(day_str: str, data: dict, source: str = "Oura"):
     source ownership:
       Oura → sleep_*, hrv, resting_hr, readiness*, spo2_avg, breathing_disturbance,
              stress_*, recovery_high_min, resilience_*
-      AppleHealth → steps, active_kcal, total_kcal, distance_km, activity_score,
-                    weight, vo2max, bp_systolic, bp_diastolic
+      AppleHealth → weight, vo2max, bp_systolic, bp_diastolic и метрики Module 2.
+      День без данных Oura (09.11.2026): «Здоровье» пишет ещё и активность (steps, active_kcal,
+      total_kcal, distance_km) и биометрию (hrv, resting_hr, sleep_*, spo2_avg) — прямо, последний
+      приход побеждает. День с данными Oura: эти колонки её, «Здоровье» их не трогает.
 
     Раньше: INSERT ... ON CONFLICT DO UPDATE всех 35 колонок включая None.
     Это затирало Apple Health значения Oura None-ами. См. #171.
@@ -403,7 +421,8 @@ def upsert_metrics_from_json(day_str: str, data: dict, source: str = "Oura"):
         conn.execute("INSERT OR IGNORE INTO daily_metrics(date) VALUES (?)", (day_str,))
 
         # Merge raw
-        row = conn.execute("SELECT raw FROM daily_metrics WHERE date=?", (day_str,)).fetchone()
+        row = conn.execute("SELECT raw, activity_score FROM daily_metrics WHERE date=?",
+                           (day_str,)).fetchone()
         existing_raw = {}
         if row and row[0]:
             try:
@@ -424,6 +443,14 @@ def upsert_metrics_from_json(day_str: str, data: dict, source: str = "Oura"):
                 values.pop(k, None)
             if witness:
                 existing_raw["apple_health_bp"] = witness
+        # День без данных Oura — день «Здоровья» (09.11.2026, живой случай: Apple Watch без кольца —
+        # шаги лежали только в raw, колонка steps была пуста). Признак дня Oura: её ключи в raw или
+        # её оценка активности в колонке (день, где кольцо дало только активность, ключей в raw не
+        # оставляет). В такой день «Здоровье» колонки Oura не трогает; без него — пишет прямо, и
+        # последний приход побеждает: шаги за день растут, а COALESCE заморозил бы утреннее значение.
+        oura_day = bool(OURA_RAW_KEYS & existing_raw.keys()) or (row is not None and row[1] is not None)
+        if source == "AppleHealth" and not oura_day:
+            values.update({k: data[k] for k in _APPLE_ACTIVITY_COLS if data.get(k) is not None})
         existing_raw.update(incoming)
         values["raw"] = json.dumps(existing_raw, ensure_ascii=False)
 
@@ -441,6 +468,12 @@ def upsert_metrics_from_json(day_str: str, data: dict, source: str = "Oura"):
             }
             fb_values = {k: v for k, v in fallback_map.items() if v is not None}
         else:
+            fb_values = {}
+        if fb_values and not oura_day:
+            # В день без Oura биометрия «Здоровья» — не запасная, а единственная: пишем прямо.
+            # COALESCE заморозил бы первое значение дня (ночной приход с половиной сна, утреннюю
+            # ВСР) — следующие приходы того же дня терялись бы молча.
+            values.update(fb_values)
             fb_values = {}
         if source == "AppleHealth":
             fb_values.update({k: data[k] for k in APPLE_FILL_ONLY if data.get(k) is not None})

@@ -259,3 +259,50 @@ def test_apple_day_with_only_fallback_biometrics_is_kept(db):
     assert row is not None
     assert json.loads(row["raw"])["apple_health"]["respiratory_rate"] == 14.5
     assert row["hrv"] == 41
+
+
+# ── День без Oura — день «Здоровья» (09.11.2026) ────────────────────────────────────────────
+# Живой случай: Apple Watch без кольца. Шаги приходили, но лежали только в raw (колонка steps —
+# NULL), а биометрия писалась через COALESCE и замерзала на первом приходе дня.
+
+def test_apple_only_day_gets_activity_columns_and_latest_arrival_wins(db):
+    from health_db import upsert_metrics_from_json
+    day = "2030-03-01"
+    upsert_metrics_from_json(day, {"steps": 1200, "active_kcal": 90, "distance_km": 0.9}, source="AppleHealth")
+    row = _row(db, day)
+    assert (row["steps"], row["active_kcal"], row["distance_km"]) == (1200, 90, 0.9)
+    upsert_metrics_from_json(day, {"steps": 9000, "active_kcal": 480, "distance_km": 6.8}, source="AppleHealth")
+    row = _row(db, day)
+    assert (row["steps"], row["active_kcal"], row["distance_km"]) == (9000, 480, 6.8)   # вечерний приход
+
+
+def test_apple_only_day_biometrics_follow_the_latest_arrival(db):
+    from health_db import upsert_metrics_from_json
+    day = "2030-03-02"
+    upsert_metrics_from_json(day, {"hrv": {"avg": 30}, "sleep": {"totalSleep": 3.1}}, source="AppleHealth")
+    upsert_metrics_from_json(day, {"hrv": {"avg": 41}, "sleep": {"totalSleep": 7.2}}, source="AppleHealth")
+    row = _row(db, day)
+    assert (row["hrv"], row["sleep_total"]) == (41, 7.2)       # ночной приход с половиной сна не застыл
+
+
+def test_oura_day_keeps_activity_and_biometrics_against_apple(db):
+    from health_db import upsert_metrics_from_json
+    day = "2030-03-03"       # кольцо дало только активность: ключей Oura в raw нет, признак — activity_score
+    upsert_metrics_from_json(day, {"steps": 5000, "activity_score": 80}, source="Oura")
+    upsert_metrics_from_json(day, {"steps": 300, "active_kcal": 50}, source="AppleHealth")
+    assert _row(db, day)["steps"] == 5000
+    day = "2030-03-04"       # кольцо дало биометрию: «Здоровье» её не переписывает и шаги не занимает
+    upsert_metrics_from_json(day, {"hrv": {"avg": 22}}, source="Oura")
+    upsert_metrics_from_json(day, {"hrv": {"avg": 50}, "steps": 300}, source="AppleHealth")
+    row = _row(db, day)
+    assert row["hrv"] == 22 and row["steps"] is None
+
+
+def test_oura_arriving_after_apple_takes_its_columns_back(db):
+    from health_db import upsert_metrics_from_json
+    day = "2030-03-05"
+    upsert_metrics_from_json(day, {"steps": 300, "hrv": {"avg": 50}}, source="AppleHealth")
+    upsert_metrics_from_json(day, {"steps": 5000, "hrv": {"avg": 22}}, source="Oura")
+    upsert_metrics_from_json(day, {"steps": 400, "hrv": {"avg": 51}}, source="AppleHealth")
+    row = _row(db, day)
+    assert (row["steps"], row["hrv"]) == (5000, 22)

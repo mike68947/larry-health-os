@@ -2836,7 +2836,9 @@ def migrate_all_json():
     for f in files:
         try:
             data = json.loads(f.read_text())
-            upsert_metrics_from_json(f.stem, data)
+            # Файл дня общий у Oura и «Здоровья»: источник — по содержимому, не по умолчанию (09.11.2026).
+            from metrics_db import has_oura_data
+            upsert_metrics_from_json(f.stem, data, source="Oura" if has_oura_data(data) else "AppleHealth")
         except Exception as e:
             log.warning(f"  Ошибка {f.name}: {e}")
     log.info("Миграция завершена")
